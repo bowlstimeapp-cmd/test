@@ -1,0 +1,5733 @@
+(function () {
+
+    "use strict";
+
+
+    /*
+    ============================================================
+    CONFIGURATION
+    ============================================================
+    */
+
+
+
+    /*
+    ============================================================
+    SELECTED PASS HOLDER
+    ============================================================
+    */
+
+    var selectedPassHolder = null;
+
+    var passHolderSearchTimer = null;
+
+
+    /*
+    ============================================================
+    ATTACHMENT CONFIGURATION
+    ============================================================
+    */
+
+    var MAX_ATTACHMENT_SIZE =
+        10 * 1024 * 1024;
+
+    var ALLOWED_ATTACHMENT_TYPES = [
+        "image/jpeg",
+        "image/png",
+         "application/pdf"
+    ];
+
+    var ALLOWED_ATTACHMENT_EXTENSIONS = [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".pdf"
+    ];
+
+
+    /*
+    ============================================================
+    SHAREPOINT LIST CONFIGURATION
+    ============================================================
+    */
+
+
+    var SITE_URL =
+        "https://mcga.sharepoint.com/sites/InformationAssurance";
+
+
+    var LIST_NAME =
+        "Building_Pass_Request_Public";
+
+
+    var LIST_API_URL =
+        SITE_URL +
+        "/_api/web/lists/getbytitle('" +
+        LIST_NAME +
+        "')/items";
+
+
+    var LIST_ITEM_TYPE =
+        "SP.Data.Building_x005f_Pass_x005f_RequestListItem";
+
+
+    /*
+    ============================================================
+    ADMIN USERS
+    ============================================================
+
+    Only these SharePoint accounts will see/access the
+    Admin Dashboard.
+
+    ============================================================
+    */
+
+    var ADMIN_USERS = [
+
+        "joshua.davis@mcga.gov.uk",
+
+        "chris.townsend@mcga.gov.uk"
+
+    ];
+
+
+    /*
+    ============================================================
+    SITE ACCESS PERMISSIONS
+    ============================================================
+
+    EDIT THIS SECTION TO DEFINE THE ACCESS PERMISSIONS
+    AVAILABLE FOR EACH SITE.
+
+    The user can select MULTIPLE permissions.
+
+    The selected permissions will be saved to SharePoint
+    in the existing comma-separated Access field.
+
+    ============================================================
+    */
+
+    var SITE_ACCESS_OPTIONS = {
+
+        "Aberdeen": [
+            "Main Office",
+            "Data Centre",
+        ],
+
+        "Belfast": [
+            "Main Office",
+            "IT Secure Room",
+ 
+        ],
+
+        "Beverley": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "Cardiff": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "Colchester": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "Daedalus": [
+            "Electric Pass"
+        ],
+
+        "Dover": [
+            "Main Entrance",
+            "Office Area",
+            "Restricted Area"
+        ],
+
+        "Falmouth": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "Glasgow": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "Holyhead": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "Humber": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "JRCC": [
+            "Group 4 (Visitor/Contractor) - General Access",
+            "Group 5 (ICT) - General Access, IT Area, Training Area, Operations Room, Planning Room",
+            "Group 6 (ICT+) - General Access, IT Area, Training Area, Operations Room, Planning Room & Data Hall",
+            "Group 7 (Operations) - General Access, Training Area & Operations Room",
+            "Group 8 (Operations+) - General Access, Training Area, Operations Room & Planning Room",
+            "Group 9 (Trainee) - General Access & Training Area",
+            "Group 10 (FM Contractor) - General, IT Area, Training Area, Operations Room, FM Areas & Planning Room",
+            "Group 11 (FM Contractor +) - General, IT Area, Training Area, Operations Room, FM Area, Planning Room & Data Hall"
+        ],
+
+        "Liverpool": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "London": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Milford Haven": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Plymouth": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Shetland": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Spring Place": [
+            "MCA Marine Office",
+            "MCA IT Build Room",
+            "MCA Disaster Recovery Suite",
+            "MCA Data Centre",
+            "MCA RCIT Interview Room"
+        ],
+
+        "Stornoway": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Swansea": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Torbay": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Tyneside": [
+            "N/A = No Electronic Pass",
+        ]
+
+    };
+
+
+    /*
+    ============================================================
+    APPLICATION VIEW
+    ============================================================
+    */
+
+    var currentView = "home";
+
+
+    /*
+    ============================================================
+    DASHBOARD CONTAINER
+    ============================================================
+    */
+
+    var dashboard =
+        document.getElementById("passDashboard");
+
+
+    if (!dashboard) {
+
+        console.error(
+            "Pass Dashboard: #passDashboard not found."
+        );
+
+        return;
+
+    }
+
+
+    /*
+    ============================================================
+    DATA
+    ============================================================
+    */
+
+    var allData = [];
+
+    var data = [];
+
+    var currentSearch = "";
+
+    var currentSite = "ALL";
+
+    var currentStatus = "ALL";
+
+
+    /*
+    ============================================================
+    CURRENT LOGGED-IN USER
+    ============================================================
+    */
+
+    var currentUserEmail = "";
+
+    var currentUserDisplayName = "";
+
+    var isAdmin = false;
+
+
+    /*
+    ============================================================
+    AVAILABLE SITES
+    ============================================================
+    */
+
+    var availableSites = [];
+
+
+    /*
+    ============================================================
+    INITIAL LOADING MESSAGE
+    ============================================================
+    */
+
+    dashboard.innerHTML = `
+
+        <div style="
+            padding:30px;
+            background:#f3f2f1;
+            border-radius:10px;
+            font-family:'Segoe UI',Arial,sans-serif;
+            color:#323130;
+            text-align:center;
+        ">
+
+            <div style="
+                font-size:20px;
+                font-weight:600;
+                margin-bottom:8px;
+            ">
+                Loading Access Pass Dashboard...
+            </div>
+
+            <div style="
+                font-size:13px;
+                color:#605e5c;
+            ">
+                Retrieving the latest pass data.
+            </div>
+
+        </div>
+
+    `;
+
+
+    /*
+    ============================================================
+    HELPERS
+    ============================================================
+    */
+
+    function escapeHtml(value) {
+
+        if (
+            value === null ||
+            value === undefined
+        ) {
+
+            return "";
+
+        }
+
+
+        return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+
+    }
+
+
+    function normalise(value) {
+
+        return String(
+            value || ""
+        )
+        .trim()
+        .toLowerCase();
+
+    }
+
+
+    function isAdminUser() {
+
+        var email =
+            normalise(
+                currentUserEmail
+            );
+
+
+        return ADMIN_USERS.some(
+            function (adminEmail) {
+
+                return normalise(
+                    adminEmail
+                ) === email;
+
+            }
+        );
+
+    }
+
+
+    function formatDate(value) {
+
+        if (!value) {
+
+            return "—";
+
+        }
+
+
+        var date =
+            new Date(value);
+
+
+        if (
+            isNaN(
+                date.getTime()
+            )
+        ) {
+
+            return escapeHtml(value);
+
+        }
+
+
+        return date.toLocaleDateString(
+            "en-GB",
+            {
+                day: "2-digit",
+                month: "short",
+                year: "numeric"
+            }
+        );
+
+    }
+
+
+    function formatDateTime(value) {
+
+        if (!value) {
+
+            return "—";
+
+        }
+
+
+        var date =
+            new Date(value);
+
+
+        if (
+            isNaN(
+                date.getTime()
+            )
+        ) {
+
+            return escapeHtml(value);
+
+        }
+
+
+        return (
+            date.toLocaleDateString(
+                "en-GB",
+                {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric"
+                }
+            )
+            +
+            " "
+            +
+            date.toLocaleTimeString(
+                "en-GB",
+                {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                }
+            )
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    GET ACCESS OPTIONS FOR SITE
+    ============================================================
+    */
+
+    function getAccessOptionsForSite(site) {
+
+        if (
+            !site ||
+            !SITE_ACCESS_OPTIONS[site]
+        ) {
+
+            return [];
+
+        }
+
+
+        return SITE_ACCESS_OPTIONS[site];
+
+    }
+
+
+    /*
+    ============================================================
+    GET SELECTED ACCESS PERMISSIONS
+    ============================================================
+    */
+
+    function getSelectedAccessPermissions() {
+
+        var accessSelect =
+            document.getElementById(
+                "formAccess"
+            );
+
+
+        if (!accessSelect) {
+
+            return [];
+
+        }
+
+
+        return Array.from(
+            accessSelect.selectedOptions
+        )
+        .map(
+            function (option) {
+
+                return option.value;
+
+            }
+        )
+        .filter(
+            function (value) {
+
+                return value !== "";
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    UPDATE ACCESS PERMISSIONS DROPDOWN
+    ============================================================
+    */
+
+    function updateAccessPermissionsDropdown(
+        clearSelection
+    ) {
+
+        var siteSelect =
+            document.getElementById(
+                "formSite"
+            );
+
+
+        var accessSelect =
+            document.getElementById(
+                "formAccess"
+            );
+
+
+        var accessHelp =
+            document.getElementById(
+                "passAccessStatus"
+            );
+
+
+        if (
+            !siteSelect ||
+            !accessSelect
+        ) {
+
+            return;
+
+        }
+
+
+        var selectedSite =
+            siteSelect.value;
+
+
+        var options =
+            getAccessOptionsForSite(
+                selectedSite
+            );
+
+
+        if (clearSelection !== false) {
+
+            accessSelect.innerHTML = "";
+
+        }
+
+
+        if (!selectedSite) {
+
+            accessSelect.disabled =
+                true;
+
+
+            accessSelect.innerHTML = `
+
+                <option value="">
+                    Select a site first
+                </option>
+
+            `;
+
+
+            if (accessHelp) {
+
+                accessHelp.className =
+                    "pass-site-loading";
+
+                accessHelp.textContent =
+                    "Select a site to see available access areas.";
+
+            }
+
+
+            return;
+
+        }
+
+
+        accessSelect.disabled =
+            false;
+
+
+        accessSelect.innerHTML = `
+
+            <option value="">
+                Select access areas...
+            </option>
+
+        `;
+
+
+        options.forEach(
+            function (optionValue) {
+
+                var option =
+                    document.createElement(
+                        "option"
+                    );
+
+
+                option.value =
+                    optionValue;
+
+
+                option.textContent =
+                    optionValue;
+
+
+                accessSelect.appendChild(
+                    option
+                );
+
+            }
+        );
+
+
+        if (options.length === 0) {
+
+            accessSelect.disabled =
+                true;
+
+
+            accessSelect.innerHTML = `
+
+                <option value="">
+                    No access areas configured
+                </option>
+
+            `;
+
+
+            if (accessHelp) {
+
+                accessHelp.className =
+                    "pass-site-error";
+
+                accessHelp.textContent =
+                    "No access permissions have been configured for this site.";
+
+            }
+
+            return;
+
+        }
+
+
+        if (accessHelp) {
+
+            accessHelp.className =
+                "pass-site-loading";
+
+            accessHelp.textContent =
+                "Hold Ctrl (Windows) or Command (Mac) to select multiple areas.";
+
+        }
+
+    }
+
+
+    /*
+    ============================================================
+    GET CURRENT SHAREPOINT USER
+    ============================================================
+    */
+
+    function getCurrentUser() {
+
+        return fetch(
+            SITE_URL +
+            "/_api/web/currentuser",
+            {
+                method: "GET",
+
+                credentials: "same-origin",
+
+                headers: {
+                    "Accept":
+                        "application/json;odata=verbose"
+                }
+            }
+        )
+        .then(
+            function (response) {
+
+                if (!response.ok) {
+
+                    throw new Error(
+                        "Unable to determine the current SharePoint user. HTTP " +
+                        response.status
+                    );
+
+                }
+
+
+                return response.json();
+
+            }
+        )
+        .then(
+            function (json) {
+
+                var user =
+                    json.d;
+
+
+                currentUserEmail =
+                    String(
+                        user.Email || ""
+                    )
+                    .trim()
+                    .toLowerCase();
+
+
+                currentUserDisplayName =
+                    String(
+                        user.Title || ""
+                    )
+                    .trim();
+
+
+                isAdmin =
+                    isAdminUser();
+
+
+                console.log(
+                    "Current SharePoint user:",
+                    currentUserDisplayName,
+                    currentUserEmail
+                );
+
+
+                console.log(
+                    "Admin access:",
+                    isAdmin
+                );
+
+
+                return user;
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    GET AVAILABLE SITES
+    ============================================================
+    */
+
+    function getAvailableSites() {
+
+        availableSites =
+            Object.keys(
+                SITE_ACCESS_OPTIONS
+            )
+            .sort(
+                function (a, b) {
+
+                    return a.localeCompare(
+                        b,
+                        "en-GB",
+                        {
+                            sensitivity:
+                                "base"
+                        }
+                    );
+
+                }
+            );
+
+
+        console.log(
+            "Available sites from SITE_ACCESS_OPTIONS:",
+            availableSites
+        );
+
+
+        return Promise.resolve(
+            availableSites
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    STATUS
+    ============================================================
+    */
+
+    function getStatus(record) {
+
+        var value =
+            String(
+                record.Status || ""
+            ).toLowerCase();
+
+
+        if (
+            value.indexOf(
+                "pass issued"
+            ) !== -1
+        ) {
+
+            return {
+
+                label: "Issued",
+
+                className: "status-green"
+
+            };
+
+        }
+
+
+        if (
+            value.indexOf(
+                "pass with"
+            ) !== -1
+        ) {
+
+            return {
+
+                label: "Pending",
+
+                className: "status-amber"
+
+            };
+
+        }
+
+
+        if (
+            value.indexOf(
+                "rejected"
+            ) !== -1
+        ) {
+
+            return {
+
+                label: "Rejected",
+
+                className: "status-red"
+
+            };
+
+        }
+
+
+        return {
+
+            label: "Other",
+
+            className: "status-grey"
+
+        };
+
+    }
+
+
+    /*
+    ============================================================
+    EXPIRY
+    ============================================================
+    */
+
+    function getExpiry(record) {
+
+        if (!record.Expiry_Date) {
+
+            return {
+
+                label: "No expiry",
+
+                className: "expiry-grey"
+
+            };
+
+        }
+
+
+        var expiry =
+            new Date(
+                record.Expiry_Date
+            );
+
+
+        var today =
+            new Date();
+
+
+        expiry.setHours(
+            23,
+            59,
+            59,
+            999
+        );
+
+
+        today.setHours(
+            0,
+            0,
+            0,
+            0
+        );
+
+
+        var days =
+            Math.ceil(
+                (
+                    expiry.getTime()
+                    -
+                    today.getTime()
+                )
+                /
+                (
+                    1000 *
+                    60 *
+                    60 *
+                    24
+                )
+            );
+
+
+        if (days < 0) {
+
+            return {
+
+                label: "Expired",
+
+                className: "expiry-red"
+
+            };
+
+        }
+
+
+        if (days <= 90) {
+
+            return {
+
+                label:
+                    days +
+                    " days remaining",
+
+                className:
+                    "expiry-amber"
+
+            };
+
+        }
+
+
+        return {
+
+            label: "Valid",
+
+            className:
+                "expiry-green"
+
+        };
+
+    }
+
+
+    /*
+    ============================================================
+    ACCESS TAGS
+    ============================================================
+    */
+
+    function accessTags(value) {
+
+        if (!value) {
+
+            return "—";
+
+        }
+
+
+        return String(value)
+            .split(",")
+            .map(
+                function (item) {
+
+                    return (
+                        '<span class="access-tag">' +
+                        escapeHtml(
+                            item.trim()
+                        ) +
+                        '</span>'
+                    );
+
+                }
+            )
+            .join("");
+
+    }
+
+
+    /*
+    ============================================================
+    GET SITES
+    ============================================================
+    */
+
+    function getSites() {
+
+        var sites = {};
+
+
+        data.forEach(
+            function (record) {
+
+                if (record.Site) {
+
+                    sites[
+                        record.Site
+                    ] = true;
+
+                }
+
+            }
+        );
+
+
+        return Object.keys(sites)
+            .sort();
+
+    }
+
+
+    /*
+    ============================================================
+    FILTER DATA
+    ============================================================
+    */
+
+    function getFilteredData() {
+
+        return data.filter(
+            function (record) {
+
+                var searchText =
+                    normalise(
+                        currentSearch
+                    );
+
+
+                var matchesSearch =
+                    !searchText
+
+                    ||
+
+                    String(
+                        record.ID || ""
+                    )
+                    .toLowerCase()
+                    .indexOf(
+                        searchText
+                    ) !== -1
+
+                    ||
+
+                    String(
+                        record.Pass_Holder || ""
+                    )
+                    .toLowerCase()
+                    .indexOf(
+                        searchText
+                    ) !== -1
+
+                    ||
+
+                    String(
+                        record.Site || ""
+                    )
+                    .toLowerCase()
+                    .indexOf(
+                        searchText
+                    ) !== -1
+
+                    ||
+
+                    String(
+                        record.Clearance_Level || ""
+                    )
+                    .toLowerCase()
+                    .indexOf(
+                        searchText
+                    ) !== -1
+
+                    ||
+
+                    String(
+                        record.Pass_Requester || ""
+                    )
+                    .toLowerCase()
+                    .indexOf(
+                        searchText
+                    ) !== -1;
+
+
+                var status =
+                    getStatus(record);
+
+
+                var matchesStatus =
+                    currentStatus === "ALL"
+                    ||
+                    status.label ===
+                    currentStatus;
+
+
+                var matchesSite =
+                    currentSite === "ALL"
+                    ||
+                    record.Site ===
+                    currentSite;
+
+
+                return (
+                    matchesSearch
+                    &&
+                    matchesStatus
+                    &&
+                    matchesSite
+                );
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    COUNTS
+    ============================================================
+    */
+
+    function getCounts() {
+
+        var issued = 0;
+
+        var pending = 0;
+
+        var rejected = 0;
+
+        var expired = 0;
+
+
+        data.forEach(
+            function (record) {
+
+                var status =
+                    getStatus(record);
+
+
+                if (
+                    status.label ===
+                    "Issued"
+                ) {
+
+                    issued++;
+
+                }
+
+
+                if (
+                    status.label ===
+                    "Pending"
+                ) {
+
+                    pending++;
+
+                }
+
+
+                if (
+                    status.label ===
+                    "Rejected"
+                ) {
+
+                    rejected++;
+
+                }
+
+
+                var expiry =
+                    getExpiry(record);
+
+
+                if (
+                    expiry.label ===
+                    "Expired"
+                ) {
+
+                    expired++;
+
+                }
+
+            }
+        );
+
+
+        return {
+
+            issued: issued,
+
+            pending: pending,
+
+            rejected: rejected,
+
+            expired: expired
+
+        };
+
+    }
+
+    /*
+    ============================================================
+    APPLICATION NAVIGATION
+    ============================================================
+    */
+
+    function renderNavigation() {
+
+        var adminButton = "";
+
+
+        if (isAdmin) {
+
+            adminButton = `
+
+                <button
+                    type="button"
+                    class="pass-nav-button pass-nav-button-admin"
+                    id="passAdminDashboardButton"
+                >
+                    Admin Dashboard
+                </button>
+
+            `;
+
+        }
+
+
+        return `
+
+            <div class="pass-app-nav">
+
+                <div class="pass-app-nav-title">
+                    Access Pass Management
+                </div>
+
+                <div class="pass-app-nav-buttons">
+
+                    <button
+                        type="button"
+                        class="pass-nav-button"
+                        id="passHomeButton"
+                    >
+                        Home
+                    </button>
+
+
+                    <button
+                        type="button"
+                        class="pass-nav-button"
+                        id="passSubmitButton"
+                    >
+                        Submit Request
+                    </button>
+
+
+                    <button
+                        type="button"
+                        class="pass-nav-button pass-nav-button-primary"
+                        id="passDashboardButton"
+                    >
+                        Reporting Dashboard
+                    </button>
+
+
+                    ${adminButton}
+
+                </div>
+
+            </div>
+
+        `;
+
+    }
+
+
+    /*
+    ============================================================
+    HOME PAGE
+    ============================================================
+    */
+
+    function renderHome() {
+
+        dashboard.innerHTML = `
+
+            <div class="pass-home">
+
+                ${renderNavigation()}
+
+
+                <div class="pass-home-header">
+
+                    <h1>
+                        Access Pass Management
+                    </h1>
+
+                    <p>
+                        Submit a new access pass request or
+                        view the reporting dashboard.
+                    </p>
+
+                </div>
+
+
+                <div class="pass-choice-grid">
+
+
+                    <div
+                        class="pass-choice-card"
+                        id="openSubmissionCard"
+                    >
+
+                        <div class="pass-choice-icon">
+                            +
+                        </div>
+
+                        <h2>
+                            Submit a Pass Request
+                        </h2>
+
+                        <p>
+                            Complete the access pass request
+                            form and submit it directly to the
+                            Building Pass register.
+                        </p>
+
+                    </div>
+
+
+                    <div
+                        class="pass-choice-card"
+                        id="openDashboardCard"
+                    >
+
+                        <div class="pass-choice-icon">
+                            ☷
+                        </div>
+
+                        <h2>
+                            Reporting Dashboard
+                        </h2>
+
+                        <p>
+                            View your current pass requests,
+                            statuses, expiry information,
+                            sites and access permissions.
+                        </p>
+
+                    </div>
+
+
+                    ${
+                        isAdmin
+                        ?
+                        `
+                            <div
+                                class="pass-choice-card"
+                                id="openAdminDashboardCard"
+                            >
+
+                                <div class="pass-choice-icon">
+                                    ⚙
+                                </div>
+
+                                <h2>
+                                    Admin Dashboard
+                                </h2>
+
+                                <p>
+                                    View and search all access
+                                    pass requests across the
+                                    Building Pass register.
+                                </p>
+
+                            </div>
+                        `
+                        :
+                        ""
+                    }
+
+
+                </div>
+
+            </div>
+
+        `;
+
+
+        document
+            .getElementById(
+                "openSubmissionCard"
+            )
+            .addEventListener(
+                "click",
+                function () {
+
+                    currentView =
+                        "submit";
+
+                    renderSubmissionForm();
+
+                }
+            );
+
+
+        document
+            .getElementById(
+                "openDashboardCard"
+            )
+            .addEventListener(
+                "click",
+                function () {
+
+                    currentView =
+                        "dashboard";
+
+                    prepareUserDashboard();
+
+                }
+            );
+
+
+        var adminCard =
+            document.getElementById(
+                "openAdminDashboardCard"
+            );
+
+
+        if (adminCard) {
+
+            adminCard.addEventListener(
+                "click",
+                function () {
+
+                    if (!isAdmin) {
+
+                        return;
+
+                    }
+
+
+                    currentView =
+                        "admin";
+
+                    prepareAdminDashboard();
+
+                }
+            );
+
+        }
+
+
+        bindNavigation();
+
+    }
+
+
+    /*
+    ============================================================
+    SUBMISSION FORM
+    ============================================================
+    */
+
+    function renderSubmissionForm() {
+
+        dashboard.innerHTML = `
+
+            <div>
+
+                ${renderNavigation()}
+
+                <div class="dashboard-header">
+
+                    <h1>
+                        Building Pass Request Form
+                    </h1>
+
+                </div>
+
+
+                <div class="pass-form-container">
+
+                    <div class="pass-form-header">
+
+                        <h1>
+                            Submit Access Pass Request
+                        </h1>
+
+                        <p>
+                            Please provide the details required
+                            for the access pass request.
+                        </p>
+
+                    </div>
+
+
+                    <div
+                        id="passFormMessage"
+                        class="pass-form-message"
+                    ></div>
+
+
+                    <form
+                        id="passSubmissionForm"
+                        novalidate
+                    >
+
+
+<div class="pass-form-grid">
+    <div class="pass-form-field">
+        <label class="pass-form-label">
+            Are you a new starter?
+            <span class="pass-form-required">*</span>
+        </label>
+
+        <select id="formNewStarter" class="pass-form-input" required>
+            <option value="">Please select</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+        </select>
+    </div>
+</div>
+<br>
+<div class="pass-form-grid">
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Pass Holder
+                                    <span class="pass-form-required">*</span>
+
+                                </label>
+
+
+                                <div
+                                    class="pass-user-picker"
+                                    id="passHolderPicker"
+                                >
+
+                                    <input
+                                        type="text"
+                                        id="formPassHolderSearch"
+                                        class="pass-form-input"
+                                        placeholder="Start typing a name..."
+                                        autocomplete="off"
+                                    >
+
+
+                                    <div
+                                        id="passHolderResults"
+                                        class="pass-user-results"
+                                    ></div>
+
+
+                                    <div
+                                        id="passHolderSelected"
+                                        class="pass-user-selected"
+                                    ></div>
+
+
+                                    <input
+                                        type="hidden"
+                                        id="formPassHolder"
+                                        value=""
+                                    >
+
+                                </div>
+
+
+                                <div class="pass-form-help">
+
+                                    Start typing the pass holder's name and select
+                                    the correct person from the results.
+
+                                </div>
+
+                            </div>
+
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Site
+                                    <span class="pass-form-required">*</span>
+
+                                </label>
+
+                                <select
+                                    id="formSite"
+                                    class="pass-form-select"
+                                    required
+                                >
+
+                                    <option value="">
+                                        Loading sites...
+                                    </option>
+
+                                </select>
+
+                                <div
+                                    id="passSiteStatus"
+                                    class="pass-site-loading"
+                                >
+                                    Loading available sites...
+                                </div>
+
+                            </div>
+
+
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Clearance Level
+                                    <span class="pass-form-required">*</span>
+
+                                </label>
+
+                                <select
+                                    id="formClearance"
+                                    class="pass-form-select"
+                                    required
+                                >
+
+                                    <option value="">
+                                        Select clearance
+                                    </option>
+
+                                    <option value="BPSS">
+                                        BPSS (Baseline Personnel Security Standard) - Blue stripe
+                                    </option>
+
+                                    <option value="CTC">
+                                        CTC (Counter Terrorism Check) - Red stripe
+                                    </option>
+
+                                    <option value="SC">
+                                        SC (Security Check) - Yellow stripe
+                                    </option>
+
+                                    <option value="DV">
+                                        DV (Developed Vetting) - Green stripe
+                                    </option>
+
+                                </select>
+
+                            </div>
+
+
+<div
+    class="pass-form-field"
+    id="nationalInsuranceField"
+    style="display: none;"
+>
+    <label class="pass-form-label">
+        National Insurance Number
+        <span class="pass-form-required">*</span>
+    </label>
+
+    <input
+        type="text"
+        id="formNationalInsurance"
+        class="pass-form-input"
+    >
+</div>
+
+
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Required Date
+                                    <span class="pass-form-required">*</span>
+
+                                </label>
+
+                                <input
+                                    type="date"
+                                    id="formRequiredDate"
+                                    class="pass-form-input"
+                                    required
+                                >
+
+                            </div>
+
+
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Expiry Date
+
+                                </label>
+
+                                <input
+                                    type="date"
+                                    id="formExpiryDate"
+                                    class="pass-form-input"
+                                >
+
+                            </div>
+
+
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Pass Requester
+
+                                </label>
+
+                                <input
+                                    type="text"
+                                    id="formPassRequester"
+                                    class="pass-form-input"
+                                    readonly
+                                >
+
+                                <div class="pass-form-help">
+
+                                    The request will be associated
+                                    with your current SharePoint account.
+
+                                </div>
+
+                            </div>
+
+
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Access Permissions
+                                    <span class="pass-form-required">*</span>
+
+                                </label>
+
+                                <select
+                                    id="formAccess"
+                                    class="pass-form-select pass-access-select"
+                                    multiple
+                                    required
+                                    disabled
+                                >
+
+                                    <option value="">
+                                        Select a site first
+                                    </option>
+
+                                </select>
+
+                                <div
+                                    id="passAccessStatus"
+                                    class="pass-form-help"
+                                >
+                                    Select a site to see available access areas.
+
+                                </div>
+
+                            </div>
+
+
+                            <div
+                                class="pass-form-field pass-form-field-full"
+                            >
+
+                                <label class="pass-form-label">
+
+                                    Justification
+                                    <span class="pass-form-required">*</span>
+
+                                </label>
+
+                                <textarea
+                                    id="formJustification"
+                                    class="pass-form-textarea"
+                                    required
+                                ></textarea>
+
+                            </div>
+
+
+                            <!--
+                            ====================================================
+                            ATTACHMENT
+                            ====================================================
+                            -->
+
+                            <div
+                                class="pass-form-field pass-form-field-full"
+                            >
+
+                                <label class="pass-form-label">
+
+                                    Optional picture of passholder
+
+                                </label>
+
+
+                                <div class="pass-attachment-wrapper">
+
+                                    <input
+                                        type="file"
+                                        id="formAttachment"
+                                        multiple
+                                        class="pass-attachment-input"
+                                        accept=".jpg,.jpeg,.png,image/jpeg,image/png,.pdf"
+                                    >
+
+
+                                    <div
+                                        class="pass-form-help"
+                                    >
+
+                                        Optional. JPG, JPEG or PNG only.
+                                        Maximum file size: 10 MB.
+
+                                    </div>
+
+
+                                    <div
+                                        id="passAttachmentError"
+                                        class="pass-attachment-error"
+                                    ></div>
+
+
+                                    <div
+                                        id="passAttachmentSelected"
+                                        class="pass-attachment-selected"
+                                    ></div>
+
+
+                                    <div
+                                        id="passAttachmentUploading"
+                                        class="pass-attachment-uploading"
+                                    >
+                                        Uploading attachment...
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+
+                        </div>
+
+
+                        <div class="pass-form-actions">
+
+                            <button
+                                type="button"
+                                id="passFormCancel"
+                                class="pass-form-button pass-form-cancel"
+                            >
+                                Cancel
+                            </button>
+
+
+                            <button
+                                type="submit"
+                                id="passFormSubmit"
+                                class="pass-form-button pass-form-submit"
+                            >
+                                Submit Request
+                            </button>
+
+                        </div>
+
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        `;
+
+
+        bindNavigation();
+
+
+        var requesterField =
+            document.getElementById(
+                "formPassRequester"
+            );
+
+
+        if (requesterField) {
+
+            requesterField.value =
+                currentUserEmail ||
+                currentUserDisplayName ||
+                "";
+
+        }
+
+
+        var siteSelect =
+            document.getElementById(
+                "formSite"
+            );
+
+
+        var siteStatus =
+            document.getElementById(
+                "passSiteStatus"
+            );
+
+
+        var accessSelect =
+            document.getElementById(
+                "formAccess"
+            );
+
+
+const newStarterSelect = document.getElementById("formNewStarter");
+const clearanceSelect = document.getElementById("formClearance");
+const nationalInsuranceField = document.getElementById("nationalInsuranceField");
+const nationalInsuranceInput = document.getElementById("formNationalInsurance");
+
+function updateNationalInsuranceVisibility() {
+    const isNewStarter = newStarterSelect.value === "yes";
+
+    const clearance = clearanceSelect.value;
+
+    const clearanceRequiresNI = ["CTC", "SC", "DV"].includes(clearance);
+
+    const shouldShowNI = isNewStarter && clearanceRequiresNI;
+
+    if (shouldShowNI) {
+        nationalInsuranceField.style.display = "";
+        nationalInsuranceInput.required = true;
+    } else {
+        nationalInsuranceField.style.display = "none";
+        nationalInsuranceInput.required = false;
+        nationalInsuranceInput.value = "";
+    }
+}
+
+newStarterSelect.addEventListener("change", updateNationalInsuranceVisibility);
+clearanceSelect.addEventListener("change", updateNationalInsuranceVisibility);
+
+// Set the correct initial state
+updateNationalInsuranceVisibility();
+
+        /*
+        --------------------------------------------------------
+        PASS HOLDER USER SEARCH
+        --------------------------------------------------------
+        */
+
+        selectedPassHolder =
+            null;
+
+
+        var passHolderSearch =
+            document.getElementById(
+                "formPassHolderSearch"
+            );
+
+
+        if (passHolderSearch) {
+
+            passHolderSearch.addEventListener(
+                "input",
+                function () {
+
+                    var searchText =
+                        this.value.trim();
+
+
+                    if (
+                        selectedPassHolder
+                    ) {
+
+                        selectedPassHolder =
+                            null;
+
+
+                        var hiddenField =
+                            document.getElementById(
+                                "formPassHolder"
+                            );
+
+
+                        if (hiddenField) {
+
+                            hiddenField.value =
+                                "";
+
+                        }
+
+                    }
+
+
+                    clearTimeout(
+                        passHolderSearchTimer
+                    );
+
+
+                    passHolderSearchTimer =
+                        setTimeout(
+                            function () {
+
+                                searchPassHolders(
+                                    searchText
+                                );
+
+                            },
+                            300
+                        );
+
+                }
+            );
+
+        }
+
+
+        /*
+        --------------------------------------------------------
+        SITE CHANGE -> UPDATE ACCESS OPTIONS
+        --------------------------------------------------------
+        */
+
+        if (siteSelect) {
+
+            siteSelect.addEventListener(
+                "change",
+                function () {
+
+                    updateAccessPermissionsDropdown(
+                        true
+                    );
+
+                }
+            );
+
+        }
+
+
+        populateSiteDropdown();
+
+
+        /*
+        --------------------------------------------------------
+        INITIAL ACCESS DROPDOWN STATE
+        --------------------------------------------------------
+        */
+
+        if (accessSelect) {
+
+            updateAccessPermissionsDropdown(
+                true
+            );
+
+        }
+
+
+        /*
+        --------------------------------------------------------
+        ATTACHMENT FILE INPUT
+        --------------------------------------------------------
+        */
+
+        var attachmentInput =
+            document.getElementById(
+                "formAttachment"
+            );
+
+
+        if (attachmentInput) {
+
+            attachmentInput.addEventListener(
+                "change",
+                function () {
+
+                    validateAndDisplayAttachment(
+                        this
+                    );
+
+                }
+            );
+
+        }
+
+
+        document
+            .getElementById(
+                "passFormCancel"
+            )
+            .addEventListener(
+                "click",
+                function () {
+
+                    currentView =
+                        "home";
+
+                    renderHome();
+
+                }
+            );
+
+
+        document
+            .getElementById(
+                "passSubmissionForm"
+            )
+            .addEventListener(
+                "submit",
+                function (event) {
+
+                    event.preventDefault();
+
+                    submitPassRequest();
+
+                }
+            );
+
+    }
+
+
+    /*
+    ============================================================
+    ATTACHMENT HELPERS
+    ============================================================
+    */
+
+
+function validateAndDisplayAttachment(input) {
+
+    var selectedContainer =
+        document.getElementById(
+            "passAttachmentSelected"
+        );
+
+    showAttachmentError("");
+
+    if (
+        !input ||
+        !input.files ||
+        input.files.length === 0
+    ) {
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML = "";
+            selectedContainer.style.display = "none";
+
+        }
+
+        return [];
+
+    }
+
+
+    /*
+    ------------------------------------------------------------
+    Maximum 2 files
+    ------------------------------------------------------------
+    */
+
+    if (input.files.length > 2) {
+
+        input.value = "";
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML = "";
+            selectedContainer.style.display = "none";
+
+        }
+
+        showAttachmentError(
+            "You can upload a maximum of 2 files."
+        );
+
+        return [];
+
+    }
+
+
+    var files = Array.from(input.files);
+
+
+    /*
+    ------------------------------------------------------------
+    Validate every selected file
+    ------------------------------------------------------------
+    */
+
+    for (var i = 0; i < files.length; i++) {
+
+        var validation =
+            validateAttachmentFile(
+                files[i]
+            );
+
+
+        if (!validation.valid) {
+
+            input.value = "";
+
+            if (selectedContainer) {
+
+                selectedContainer.innerHTML = "";
+                selectedContainer.style.display = "none";
+
+            }
+
+            showAttachmentError(
+                files[i].name +
+                ": " +
+                validation.message
+            );
+
+            return [];
+
+        }
+
+    }
+
+
+    /*
+    ------------------------------------------------------------
+    Display selected files
+    ------------------------------------------------------------
+    */
+
+    if (selectedContainer) {
+
+        selectedContainer.innerHTML = "";
+
+
+        files.forEach(
+            function (file, index) {
+
+                var fileElement =
+                    document.createElement("div");
+
+                fileElement.className =
+                    "pass-attachment-selected";
+
+
+                fileElement.innerHTML = `
+
+                    <div class="pass-attachment-selected-icon">
+                        📎
+                    </div>
+
+                    <div class="pass-attachment-selected-details">
+
+                        <div class="pass-attachment-selected-name">
+                            ${escapeHtml(file.name)}
+                        </div>
+
+                        <div class="pass-attachment-selected-size">
+                            ${formatFileSize(file.size)}
+                        </div>
+
+                    </div>
+
+                `;
+
+
+                selectedContainer.appendChild(
+                    fileElement
+                );
+
+            }
+        );
+
+
+        /*
+        --------------------------------------------------------
+        Add one remove button for all selected files
+        --------------------------------------------------------
+        */
+
+        var removeButton =
+            document.createElement("button");
+
+        removeButton.type = "button";
+        removeButton.className =
+            "pass-attachment-remove";
+        removeButton.title =
+            "Remove attachments";
+        removeButton.textContent = "×";
+
+
+        removeButton.addEventListener(
+            "click",
+            function () {
+
+                clearAttachment();
+
+            }
+        );
+
+
+        selectedContainer.appendChild(
+            removeButton
+        );
+
+
+        selectedContainer.style.display =
+            "flex";
+
+    }
+
+
+    return files;
+
+}
+
+
+    function clearAttachment() {
+
+        var input =
+            document.getElementById(
+                "formAttachment"
+            );
+
+
+        var selectedContainer =
+            document.getElementById(
+                "passAttachmentSelected"
+            );
+
+
+        var uploadingContainer =
+            document.getElementById(
+                "passAttachmentUploading"
+            );
+
+
+        if (input) {
+
+            input.value =
+                "";
+
+        }
+
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML =
+                "";
+
+            selectedContainer.style.display =
+                "none";
+
+        }
+
+
+        if (uploadingContainer) {
+
+            uploadingContainer.style.display =
+                "none";
+
+        }
+
+
+        showAttachmentError("");
+
+    }
+
+
+    /*
+    ============================================================
+    SHAREPOINT ATTACHMENT FILENAME
+    ============================================================
+
+    SharePoint attachment URLs use an OData string inside
+    FileName='...'.
+
+    Apostrophes therefore need to be escaped.
+    ============================================================
+    */
+
+    function escapeSharePointAttachmentFileName(
+        fileName
+    ) {
+
+        var safeName =
+            String(
+                fileName || ""
+            );
+
+
+        /*
+        --------------------------------------------------------
+        Remove path information. A browser normally supplies
+        only the filename, but this makes the function safer.
+        --------------------------------------------------------
+        */
+
+        safeName =
+            safeName
+                .split("\\")
+                .pop()
+                .split("/")
+                .pop();
+
+
+        /*
+        --------------------------------------------------------
+        Keep the filename reasonably sized for SharePoint.
+        --------------------------------------------------------
+        */
+
+        if (
+            safeName.length >
+            180
+        ) {
+
+            var extension =
+                getAttachmentExtension(
+                    safeName
+                );
+
+
+            var baseName =
+                safeName.substring(
+                    0,
+                    safeName.length -
+                    extension.length
+                );
+
+
+            baseName =
+                baseName.substring(
+                    0,
+                    180 -
+                    extension.length
+                );
+
+
+            safeName =
+                baseName +
+                extension;
+
+        }
+
+
+        /*
+        --------------------------------------------------------
+        OData escaping for apostrophes.
+        --------------------------------------------------------
+        */
+
+        safeName =
+            safeName.replace(
+                /'/g,
+                "''"
+            );
+
+
+        return encodeURIComponent(
+            safeName
+        )
+        /*
+        --------------------------------------------------------
+        encodeURIComponent intentionally leaves some characters
+        alone. Encode apostrophes explicitly as well.
+        --------------------------------------------------------
+        */
+        .replace(
+            /'/g,
+            "%27"
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    UPLOAD ATTACHMENT TO SHAREPOINT ITEM
+    ============================================================
+    */
+
+    function uploadAttachmentToItem(
+        itemId,
+        file,
+        digest
+    ) {
+
+        if (!file) {
+
+            return Promise.resolve();
+
+        }
+
+
+        var validation =
+            validateAttachmentFile(
+                file
+            );
+
+
+        if (!validation.valid) {
+
+            return Promise.reject(
+                new Error(
+                    validation.message
+                )
+            );
+
+        }
+
+
+        var encodedFileName =
+            escapeSharePointAttachmentFileName(
+                file.name
+            );
+
+
+        var attachmentUrl =
+            LIST_API_URL +
+            "(" +
+            encodeURIComponent(
+                itemId
+            ) +
+            ")/AttachmentFiles/add(FileName='" +
+            encodedFileName +
+            "')";
+
+
+        console.log(
+            "Uploading SharePoint attachment:",
+            file.name,
+            "to item:",
+            itemId
+        );
+
+
+        return fetch(
+            attachmentUrl,
+            {
+                method: "POST",
+
+                credentials:
+                    "same-origin",
+
+                headers: {
+
+                    "Accept":
+                        "application/json;odata=verbose",
+
+                    "Content-Type":
+                        "application/octet-stream",
+
+                    "X-RequestDigest":
+                        digest
+
+                },
+
+                body:
+                    file
+
+            }
+        )
+        .then(
+            function (response) {
+
+                if (!response.ok) {
+
+                    return response.text()
+                        .then(
+                            function (text) {
+
+                                console.error(
+                                    "SharePoint attachment upload response:",
+                                    text
+                                );
+
+
+                                throw new Error(
+                                    "SharePoint returned HTTP " +
+                                    response.status +
+                                    " while uploading the attachment. " +
+                                    text
+                                );
+
+                            }
+                        );
+
+                }
+
+
+                return response.json();
+
+            }
+        )
+        .then(
+            function (result) {
+
+                console.log(
+                    "Attachment uploaded successfully.",
+                    result
+                );
+
+
+                return result;
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    POPULATE SITE DROPDOWN
+    ============================================================
+    */
+
+    function populateSiteDropdown() {
+
+        var siteSelect =
+            document.getElementById(
+                "formSite"
+            );
+
+
+        var siteStatus =
+            document.getElementById(
+                "passSiteStatus"
+            );
+
+
+        if (!siteSelect) {
+
+            return;
+
+        }
+
+
+        siteSelect.innerHTML = `
+
+            <option value="">
+                Select site
+            </option>
+
+        `;
+
+
+        availableSites.forEach(
+            function (site) {
+
+                var option =
+                    document.createElement(
+                        "option"
+                    );
+
+
+                option.value =
+                    site;
+
+
+                option.textContent =
+                    site;
+
+
+                siteSelect.appendChild(
+                    option
+                );
+
+            }
+        );
+
+
+        if (siteStatus) {
+
+            siteStatus.className =
+                "pass-site-loading";
+
+
+            siteStatus.textContent =
+                availableSites.length +
+                " site" +
+                (
+                    availableSites.length === 1
+                        ? ""
+                        : "s"
+                ) +
+                " available.";
+
+        }
+
+
+        updateAccessPermissionsDropdown(
+            true
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    GET REQUEST DIGEST
+    ============================================================
+    */
+
+    function getRequestDigest() {
+
+        return fetch(
+            SITE_URL +
+            "/_api/contextinfo",
+            {
+                method: "POST",
+
+                headers: {
+
+                    "Accept":
+                        "application/json;odata=verbose",
+
+                    "Content-Type":
+                        "application/json;odata=verbose"
+
+                },
+
+                credentials:
+                    "same-origin"
+
+            }
+        )
+        .then(
+            function (response) {
+
+                if (!response.ok) {
+
+                    throw new Error(
+                        "Unable to obtain SharePoint request digest. HTTP " +
+                        response.status
+                    );
+
+                }
+
+
+                return response.json();
+
+            }
+        )
+        .then(
+            function (json) {
+
+                return json
+                    .d
+                    .GetContextWebInformation
+                    .FormDigestValue;
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    SEARCH SHAREPOINT USERS
+    ============================================================
+    */
+
+    function searchPassHolders(searchText) {
+
+        var resultsContainer =
+            document.getElementById(
+                "passHolderResults"
+            );
+
+
+        if (!resultsContainer) {
+
+            return;
+
+        }
+
+
+        searchText =
+            searchText.trim();
+
+
+        if (searchText.length < 2) {
+
+            resultsContainer.innerHTML =
+                "";
+
+            resultsContainer.style.display =
+                "none";
+
+            return;
+
+        }
+
+
+        resultsContainer.innerHTML = `
+
+            <div class="pass-user-no-results">
+
+                Searching...
+
+            </div>
+
+        `;
+
+
+        resultsContainer.style.display =
+            "block";
+
+
+        var queryParams = {
+
+            __metadata: {
+
+                type:
+                    "SP.UI.ApplicationPages.ClientPeoplePickerQueryParameters"
+
+            },
+
+            AllowEmailAddresses: true,
+
+            AllowMultipleEntities: false,
+
+            AllUrlZones: false,
+
+            MaximumEntitySuggestions: 10,
+
+            PrincipalSource: 15,
+
+            PrincipalType: 1,
+
+            QueryString: searchText
+
+        };
+
+
+        getRequestDigest()
+
+        .then(
+            function (digest) {
+
+                return fetch(
+                    SITE_URL +
+                    "/_api/SP.UI.ApplicationPages.ClientPeoplePickerWebServiceInterface.clientPeoplePickerSearchUser",
+                    {
+                        method: "POST",
+
+                        credentials:
+                            "same-origin",
+
+                        headers: {
+
+                            "Accept":
+                                "application/json;odata=verbose",
+
+                            "Content-Type":
+                                "application/json;odata=verbose",
+
+                            "X-RequestDigest":
+                                digest
+
+                        },
+
+                        body:
+                            JSON.stringify(
+                                {
+                                    queryParams:
+                                        queryParams
+                                }
+                            )
+
+                    }
+                );
+
+            }
+        )
+        .then(
+            function (response) {
+
+                console.log(
+                    "People picker search HTTP status:",
+                    response.status
+                );
+
+
+                if (!response.ok) {
+
+                    return response.text()
+                        .then(
+                            function (text) {
+
+                                console.error(
+                                    "People picker search response:",
+                                    text
+                                );
+
+
+                                throw new Error(
+                                    "People picker search returned HTTP " +
+                                    response.status +
+                                    ". " +
+                                    text
+                                );
+
+                            }
+                        );
+
+                }
+
+
+                return response.json();
+
+            }
+        )
+        .then(
+            function (json) {
+
+                var raw =
+                    json &&
+                    json.d &&
+                    json.d.ClientPeoplePickerSearchUser;
+
+
+                var entities = [];
+
+
+                try {
+
+                    entities =
+                        JSON.parse(
+                            raw
+                        ) ||
+                        [];
+
+                }
+                catch (error) {
+
+                    console.error(
+                        "Unable to parse people picker response.",
+                        error,
+                        raw
+                    );
+
+                    entities = [];
+
+                }
+
+
+                console.log(
+                    "People picker results:",
+                    entities
+                );
+
+
+                renderPassHolderResults(
+                    entities
+                );
+
+            }
+        )
+        .catch(
+            function (error) {
+
+                console.error(
+                    "Pass holder search failed.",
+                    error
+                );
+
+
+                resultsContainer.innerHTML = `
+
+                    <div class="pass-user-search-error">
+
+                        Unable to search for users.
+
+                    </div>
+
+                `;
+
+
+                resultsContainer.style.display =
+                    "block";
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    RENDER PASS HOLDER SEARCH RESULTS
+    ============================================================
+    */
+
+    function renderPassHolderResults(entities) {
+
+        var resultsContainer =
+            document.getElementById(
+                "passHolderResults"
+            );
+
+
+        if (!resultsContainer) {
+
+            return;
+
+        }
+
+
+        var users = (entities || [])
+
+            .map(
+                function (entity) {
+
+                    var entityData =
+                        entity.EntityData ||
+                        {};
+
+
+                    var email =
+                        entityData.Email ||
+                        "";
+
+
+                    if (
+                        !email &&
+                        entity.Key &&
+                        entity.Key.indexOf("@") !== -1
+                    ) {
+
+                        email =
+                            entity.Key;
+
+                    }
+
+
+                    return {
+
+                        displayName:
+                            entity.DisplayText ||
+                            entity.Description ||
+                            "",
+
+                        email:
+                            email,
+
+                        accountName:
+                            entity.Key ||
+                            ""
+
+                    };
+
+                }
+            )
+
+            .filter(
+                function (user) {
+
+                    return !!user.displayName;
+
+                }
+            );
+
+
+        if (users.length === 0) {
+
+            resultsContainer.innerHTML = `
+
+                <div class="pass-user-no-results">
+
+                    No matching users found.
+
+                </div>
+
+            `;
+
+
+            resultsContainer.style.display =
+                "block";
+
+
+            return;
+
+        }
+
+
+        resultsContainer.innerHTML =
+            users
+                .map(
+                    function (user, index) {
+
+                        return `
+
+                            <div
+                                class="pass-user-result"
+                                data-user-index="${index}"
+                            >
+
+                                <div class="pass-user-result-icon">
+
+                                    👤
+
+                                </div>
+
+
+                                <div class="pass-user-result-details">
+
+                                    <div class="pass-user-result-name">
+
+                                        ${escapeHtml(
+                                            user.displayName
+                                        )}
+
+                                    </div>
+
+
+                                    ${
+                                        user.email
+
+                                        ?
+
+                                        `
+
+                                            <div class="pass-user-result-email">
+
+                                                ${escapeHtml(
+                                                    user.email
+                                                )}
+
+                                            </div>
+
+                                        `
+
+                                        :
+
+                                        ""
+
+                                    }
+
+                                </div>
+
+                            </div>
+
+                        `;
+
+                    }
+                )
+                .join("");
+
+
+        resultsContainer.style.display =
+            "block";
+
+
+        var resultElements =
+            resultsContainer.querySelectorAll(
+                ".pass-user-result"
+            );
+
+
+        resultElements.forEach(
+            function (element) {
+
+                element.addEventListener(
+                    "click",
+                    function () {
+
+                        var index =
+                            parseInt(
+                                this.getAttribute(
+                                    "data-user-index"
+                                ),
+                                10
+                            );
+
+
+                        selectPassHolder(
+                            users[index]
+                        );
+
+                    }
+                );
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    SELECT PASS HOLDER
+    ============================================================
+    */
+
+    function selectPassHolder(user) {
+
+        selectedPassHolder =
+            user;
+
+
+        var hiddenField =
+            document.getElementById(
+                "formPassHolder"
+            );
+
+
+        var searchInput =
+            document.getElementById(
+                "formPassHolderSearch"
+            );
+
+
+        var resultsContainer =
+            document.getElementById(
+                "passHolderResults"
+            );
+
+
+        var selectedContainer =
+            document.getElementById(
+                "passHolderSelected"
+            );
+
+
+        if (hiddenField) {
+
+            hiddenField.value =
+                user.email;
+
+        }
+
+
+        if (searchInput) {
+
+            searchInput.value =
+                "";
+
+            searchInput.style.display =
+                "none";
+
+        }
+
+
+        if (resultsContainer) {
+
+            resultsContainer.innerHTML =
+                "";
+
+            resultsContainer.style.display =
+                "none";
+
+        }
+
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML = `
+
+                <div class="pass-selected-user">
+
+                    <div class="pass-selected-user-icon">
+
+                        👤
+
+                    </div>
+
+
+                    <div class="pass-selected-user-details">
+
+                        <div class="pass-selected-user-name">
+
+                            ${escapeHtml(
+                                user.displayName
+                            )}
+
+                        </div>
+
+
+                        ${
+                            user.email
+
+                            ?
+
+                            `
+
+                                <div class="pass-selected-user-email">
+
+                                    ${escapeHtml(
+                                        user.email
+                                    )}
+
+                                </div>
+
+                            `
+
+                            :
+
+                            ""
+
+                        }
+
+                    </div>
+
+
+                    <button
+                        type="button"
+                        class="pass-selected-user-remove"
+                        id="removePassHolder"
+                        title="Remove selected user"
+                    >
+
+                        ×
+
+                    </button>
+
+                </div>
+
+            `;
+
+
+            selectedContainer.style.display =
+                "block";
+
+
+            document
+                .getElementById(
+                    "removePassHolder"
+                )
+                .addEventListener(
+                    "click",
+                    function () {
+
+                        clearPassHolder();
+
+                    }
+                );
+
+        }
+
+    }
+
+
+    /*
+    ============================================================
+    CLEAR SELECTED PASS HOLDER
+    ============================================================
+    */
+
+    function clearPassHolder() {
+
+        selectedPassHolder =
+            null;
+
+
+        var searchInput =
+            document.getElementById(
+                "formPassHolderSearch"
+            );
+
+
+        var resultsContainer =
+            document.getElementById(
+                "passHolderResults"
+            );
+
+
+        var selectedContainer =
+            document.getElementById(
+                "passHolderSelected"
+            );
+
+
+        var hiddenField =
+            document.getElementById(
+                "formPassHolder"
+            );
+
+
+        if (hiddenField) {
+
+            hiddenField.value =
+                "";
+
+        }
+
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML =
+                "";
+
+            selectedContainer.style.display =
+                "none";
+
+        }
+
+
+        if (resultsContainer) {
+
+            resultsContainer.innerHTML =
+                "";
+
+            resultsContainer.style.display =
+                "none";
+
+        }
+
+
+        if (searchInput) {
+
+            searchInput.value =
+                "";
+
+            searchInput.style.display =
+                "block";
+
+            searchInput.focus();
+
+        }
+
+    }
+
+
+    /*
+    ============================================================
+    SUBMIT PASS REQUEST
+    ============================================================
+    */
+
+    function submitPassRequest() {
+
+        var submitButton =
+            document.getElementById(
+                "passFormSubmit"
+            );
+
+
+        var message =
+            document.getElementById(
+                "passFormMessage"
+            );
+
+
+        var passHolder =
+            document.getElementById(
+                "formPassHolder"
+            )
+            .value;
+
+
+        var NI =
+            document.getElementById(
+                "formNationalInsurance"
+            )
+            .value;
+
+
+        var site =
+            document.getElementById(
+                "formSite"
+            )
+            .value;
+
+
+        var clearance =
+            document.getElementById(
+                "formClearance"
+            )
+            .value;
+
+
+        var requiredDate =
+            document.getElementById(
+                "formRequiredDate"
+            )
+            .value;
+
+
+        var expiryDate =
+            document.getElementById(
+                "formExpiryDate"
+            )
+            .value;
+
+
+        var requester =
+            document.getElementById(
+                "formPassRequester"
+            )
+            .value
+            .trim();
+
+
+        var selectedAccess =
+            getSelectedAccessPermissions();
+
+
+        var access =
+            selectedAccess.join(", ");
+
+
+        var justification =
+            document.getElementById(
+                "formJustification"
+            )
+            .value
+            .trim();
+
+
+/*
+--------------------------------------------------------
+GET ATTACHMENTS
+--------------------------------------------------------
+*/
+
+var attachmentInput =
+    document.getElementById(
+        "formAttachment"
+    );
+
+
+var attachmentFiles =
+    [];
+
+
+if (
+    attachmentInput &&
+    attachmentInput.files &&
+    attachmentInput.files.length > 0
+) {
+
+    attachmentFiles =
+        Array.from(
+            attachmentInput.files
+        );
+
+}
+
+
+/*
+--------------------------------------------------------
+VALIDATE ATTACHMENTS
+--------------------------------------------------------
+*/
+
+/*
+--------------------------------------------------------
+Maximum 2 files
+--------------------------------------------------------
+*/
+
+/*
+--------------------------------------------------------
+Maximum 2 files
+--------------------------------------------------------
+*/
+
+if (
+    attachmentFiles.length > 2
+) {
+
+    message.className =
+        "pass-form-message " +
+        "pass-form-message-error";
+
+    message.innerHTML =
+        "You can upload a maximum of 2 files.";
+
+    return;
+
+}
+
+/*
+--------------------------------------------------------
+Validate every attachment
+--------------------------------------------------------
+*/
+
+for (
+    var i = 0;
+    i < attachmentFiles.length;
+    i++
+) {
+
+    var attachmentValidation =
+        validateAttachmentFile(
+            attachmentFiles[i]
+        );
+
+
+if (
+    !attachmentValidation.valid
+) {
+
+    message.className =
+        "pass-form-message " +
+        "pass-form-message-error";
+
+    message.innerHTML =
+        escapeHtml(
+            attachmentFiles[i].name +
+            ": " +
+            attachmentValidation.message
+        );
+
+    return;
+
+}
+
+}
+
+
+        /*
+        --------------------------------------------------------
+        VALIDATE REQUIRED FORM FIELDS
+        --------------------------------------------------------
+        */
+
+        if (
+            !selectedPassHolder ||
+            !passHolder ||
+            !site ||
+            !clearance ||
+            !requiredDate ||
+            selectedAccess.length === 0 ||
+            !justification
+        ) {
+
+            message.className =
+                "pass-form-message " +
+                "pass-form-message-error";
+
+
+            message.innerHTML =
+                "Please complete all required fields and select at least one Access Permission.";
+
+
+            return;
+
+        }
+
+
+        submitButton.disabled =
+            true;
+
+
+        submitButton.textContent =
+            "Submitting...";
+
+
+        message.className =
+            "pass-form-message";
+
+
+        message.innerHTML =
+            "";
+
+
+        var uploadingContainer =
+            document.getElementById(
+                "passAttachmentUploading"
+            );
+
+
+        if (uploadingContainer) {
+
+            uploadingContainer.style.display =
+                "none";
+
+        }
+
+
+        var item = {
+
+            "__metadata": {
+
+                "type":
+                    LIST_ITEM_TYPE
+
+            },
+
+            Pass_Holder:
+                passHolder,
+
+            NI:
+                NI,
+
+            Site:
+                site,
+
+            Clearance_Level:
+                clearance,
+
+            Required_Date:
+                requiredDate,
+
+            Access:
+                access,
+
+            Justification:
+                justification
+
+        };
+
+
+        if (expiryDate) {
+
+            item.Expiry_Date =
+                expiryDate;
+
+        }
+
+
+        if (requester) {
+
+            item.Pass_Requester =
+                requester;
+
+        }
+
+
+        /*
+        --------------------------------------------------------
+        GET REQUEST DIGEST ONCE.
+        --------------------------------------------------------
+
+        The same digest is then used for:
+
+        1. Creating the SharePoint list item.
+        2. Uploading the attachment.
+
+        --------------------------------------------------------
+        */
+
+        getRequestDigest()
+
+        .then(
+            function (digest) {
+
+                return fetch(
+                    LIST_API_URL,
+                    {
+                        method: "POST",
+
+                        credentials:
+                            "same-origin",
+
+                        headers: {
+
+                            "Accept":
+                                "application/json;odata=verbose",
+
+                            "Content-Type":
+                                "application/json;odata=verbose",
+
+                            "X-RequestDigest":
+                                digest
+
+                        },
+
+                        body:
+                            JSON.stringify(
+                                item
+                            )
+
+                    }
+                )
+                .then(
+                    function (response) {
+
+                        if (!response.ok) {
+
+                            return response.text()
+                                .then(
+                                    function (text) {
+
+                                        throw new Error(
+                                            "SharePoint returned HTTP " +
+                                            response.status +
+                                            ". " +
+                                            text
+                                        );
+
+                                    }
+                                );
+
+                        }
+
+
+                        return response.json();
+
+                    }
+                )
+                .then(
+                    function (result) {
+
+                        /*
+                        ------------------------------------------------
+                        SHAREPOINT RETURNS THE NEW ITEM IN result.d
+                        ------------------------------------------------
+                        */
+
+                        var createdItem =
+                            result &&
+                            result.d
+                                ? result.d
+                                : null;
+
+
+                        var itemId =
+                            createdItem &&
+                            createdItem.ID
+                                ? createdItem.ID
+                                : null;
+
+
+                        if (!itemId) {
+
+                            throw new Error(
+                                "The request was created, but SharePoint did not return the new item ID. The attachment could not be uploaded."
+                            );
+
+                        }
+
+
+                        console.log(
+                            "Pass request successfully created. Item ID:",
+                            itemId
+                        );
+
+/*
+------------------------------------------------
+IF THERE ARE NO ATTACHMENTS, WE ARE FINISHED.
+------------------------------------------------
+*/
+
+if (
+    attachmentFiles.length === 0
+) {
+
+    return {
+
+        itemId:
+            itemId,
+
+        attachmentUploaded:
+            false,
+
+        attachmentCount:
+            0
+
+    };
+
+}
+
+
+/*
+------------------------------------------------
+SHOW UPLOAD STATUS
+------------------------------------------------
+*/
+
+if (uploadingContainer) {
+
+    uploadingContainer.style.display =
+        "block";
+
+    uploadingContainer.textContent =
+        "Uploading attachments...";
+
+}
+
+
+submitButton.textContent =
+    "Uploading attachments...";
+
+
+/*
+------------------------------------------------
+UPLOAD ALL FILES TO THE NEW ITEM'S ATTACHMENTS
+------------------------------------------------
+*/
+
+return attachmentFiles
+    .reduce(
+        function (promise, file, index) {
+
+            return promise.then(
+                function () {
+
+                    if (uploadingContainer) {
+
+                        uploadingContainer.textContent =
+                            "Uploading attachment " +
+                            (index + 1) +
+                            " of " +
+                            attachmentFiles.length +
+                            "...";
+
+                    }
+
+
+                    return uploadAttachmentToItem(
+                        itemId,
+                        file,
+                        digest
+                    );
+
+                }
+            );
+
+        },
+        Promise.resolve()
+    )
+    .then(
+        function () {
+
+            if (uploadingContainer) {
+
+                uploadingContainer.textContent =
+                    attachmentFiles.length +
+                    " attachment" +
+                    (
+                        attachmentFiles.length === 1
+                            ? ""
+                            : "s"
+                    ) +
+                    " uploaded successfully.";
+
+            }
+
+
+            return {
+
+                itemId:
+                    itemId,
+
+                attachmentUploaded:
+                    true,
+
+                attachmentCount:
+                    attachmentFiles.length
+
+            };
+
+        }
+    )
+    .catch(
+        function (attachmentError) {
+
+            /*
+            ------------------------------------------------
+            IMPORTANT:
+            The list item has already been created.
+
+            Therefore we report the attachment error
+            separately rather than pretending that the
+            entire request failed.
+            ------------------------------------------------
+            */
+
+            throw new Error(
+                "The pass request was created successfully as SharePoint item #" +
+                itemId +
+                ", but one or more attachments could not be uploaded. " +
+                attachmentError.message
+            );
+
+        }
+    );
+
+                    }
+                );
+
+            }
+        )
+
+        .then(
+            function (result) {
+
+                console.log(
+                    "Pass request successfully submitted.",
+                    result
+                );
+
+
+                message.className =
+                    "pass-form-message " +
+                    "pass-form-message-success";
+
+
+if (
+    result &&
+    result.attachmentUploaded
+) {
+
+    var attachmentCount =
+        result.attachmentCount || 0;
+
+    message.innerHTML =
+        "<strong>Request submitted successfully.</strong>" +
+        "<br>" +
+        "The access pass request has been added to the register and " +
+        attachmentCount +
+        " attachment" +
+        (
+            attachmentCount === 1
+                ? ""
+                : "s"
+        ) +
+        " uploaded successfully.";
+
+}
+                else {
+
+                    message.innerHTML =
+                        "<strong>Request submitted successfully.</strong>" +
+                        "<br>" +
+                        "The access pass request has been added to the register.";
+
+                }
+
+
+                document
+                    .getElementById(
+                        "passSubmissionForm"
+                    )
+                    .reset();
+
+
+                clearPassHolder();
+
+
+                clearAttachment();
+
+
+                var requesterField =
+                    document.getElementById(
+                        "formPassRequester"
+                    );
+
+
+                if (requesterField) {
+
+                    requesterField.value =
+                        currentUserEmail ||
+                        currentUserDisplayName ||
+                        "";
+
+                }
+
+
+                /*
+                ------------------------------------------------
+                RESET ACCESS DROPDOWN
+                ------------------------------------------------
+                */
+
+                updateAccessPermissionsDropdown(
+                    true
+                );
+
+
+                submitButton.disabled =
+                    false;
+
+
+                submitButton.textContent =
+                    "Submit Request";
+
+
+                loadData();
+
+            }
+        )
+
+        .catch(
+            function (error) {
+
+                console.error(
+                    "Pass request submission failed.",
+                    error
+                );
+
+
+                message.className =
+                    "pass-form-message " +
+                    "pass-form-message-error";
+
+
+                message.innerHTML =
+                    "<strong>Unable to complete the request.</strong>" +
+                    "<br>" +
+                    escapeHtml(
+                        error.message
+                    );
+
+
+                submitButton.disabled =
+                    false;
+
+
+                submitButton.textContent =
+                    "Submit Request";
+
+
+                if (uploadingContainer) {
+
+                    uploadingContainer.style.display =
+                        "none";
+
+                }
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    NAVIGATION
+    ============================================================
+    */
+
+    function bindNavigation() {
+
+        var homeButton =
+            document.getElementById(
+                "passHomeButton"
+            );
+
+
+        var submitButton =
+            document.getElementById(
+                "passSubmitButton"
+            );
+
+
+        var dashboardButton =
+            document.getElementById(
+                "passDashboardButton"
+            );
+
+
+        var adminDashboardButton =
+            document.getElementById(
+                "passAdminDashboardButton"
+            );
+
+
+        if (homeButton) {
+
+            homeButton.addEventListener(
+                "click",
+                function () {
+
+                    currentView =
+                        "home";
+
+                    renderHome();
+
+                }
+            );
+
+        }
+
+
+        if (submitButton) {
+
+            submitButton.addEventListener(
+                "click",
+                function () {
+
+                    currentView =
+                        "submit";
+
+                    renderSubmissionForm();
+
+                }
+            );
+
+        }
+
+
+        if (dashboardButton) {
+
+            dashboardButton.addEventListener(
+                "click",
+                function () {
+
+                    currentView =
+                        "dashboard";
+
+                    prepareUserDashboard();
+
+                }
+            );
+
+        }
+
+
+        if (adminDashboardButton) {
+
+            adminDashboardButton.addEventListener(
+                "click",
+                function () {
+
+                    if (!isAdmin) {
+
+                        return;
+
+                    }
+
+
+                    currentView =
+                        "admin";
+
+                    prepareAdminDashboard();
+
+                }
+            );
+
+        }
+
+    }
+
+
+    /*
+    ============================================================
+    PREPARE USER DASHBOARD
+    ============================================================
+    */
+
+    function prepareUserDashboard() {
+
+        /*
+        --------------------------------------------------------
+        SECURITY
+        --------------------------------------------------------
+
+        SharePoint item-level permissions determine which
+        records were returned by the REST API.
+
+        Therefore we do NOT filter the records here by
+        Pass_Requester.
+
+        --------------------------------------------------------
+        */
+
+        data =
+            allData.slice();
+
+
+        currentSite =
+            "ALL";
+
+
+        currentStatus =
+            "ALL";
+
+
+        renderDashboard(false);
+
+    }
+
+
+    /*
+    ============================================================
+    PREPARE ADMIN DASHBOARD
+    ============================================================
+    */
+
+    function prepareAdminDashboard() {
+
+        if (!isAdmin) {
+
+            currentView =
+                "home";
+
+            renderHome();
+
+            return;
+
+        }
+
+
+        data =
+            allData.slice();
+
+
+        currentSite =
+            "ALL";
+
+        currentStatus =
+            "ALL";
+
+        renderDashboard(true);
+
+    }
+
+
+    /*
+    ============================================================
+    RENDER DASHBOARD
+    ============================================================
+    */
+
+    function renderDashboard(adminMode) {
+
+        currentView =
+            adminMode
+                ? "admin"
+                : "dashboard";
+
+
+        var counts =
+            getCounts();
+
+
+        var filtered =
+            getFilteredData();
+
+
+        var sites =
+            getSites();
+
+
+        dashboard.innerHTML = `
+
+            ${renderNavigation()}
+
+
+            <div class="dashboard-header">
+
+                <h1>
+
+                    ${
+                        adminMode
+                            ? "Admin Dashboard"
+                            : "Access Pass Dashboard"
+                    }
+
+                </h1>
+
+
+                <p>
+
+                    ${
+                        adminMode
+                            ? "All access pass requests"
+                            : "Your access pass requests"
+                    }
+
+                </p>
+
+            </div>
+
+
+            ${
+                adminMode
+                    ? `
+                        <div class="admin-banner">
+                            Administrator view — all pass requests
+                            are visible to authorised administrators.
+                        </div>
+                      `
+                    : `
+                        <div class="admin-banner">
+                            Standard User - You will see all pass requests
+                            where you are the pass requester.
+                        </div>
+                      `
+            }
+
+
+            <div class="summary-grid">
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        Total Passes
+                    </div>
+
+                    <div class="summary-number number-blue">
+                        ${data.length}
+                    </div>
+
+                </div>
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        Issued
+                    </div>
+
+                    <div class="summary-number number-green">
+                        ${counts.issued}
+                    </div>
+
+                </div>
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        Pending
+                    </div>
+
+                    <div class="summary-number number-amber">
+                        ${counts.pending}
+                    </div>
+
+                </div>
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        Rejected
+                    </div>
+
+                    <div class="summary-number number-red">
+                        ${counts.rejected}
+                    </div>
+
+                </div>
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        Expired
+                    </div>
+
+                    <div class="summary-number number-red">
+                        ${counts.expired}
+                    </div>
+
+                </div>
+
+
+            </div>
+
+
+            <div class="controls">
+
+
+                <input
+                    type="text"
+                    id="passSearch"
+                    class="search-box"
+                    placeholder="Search ID, pass holder, site, clearance or requester..."
+                    value="${escapeHtml(currentSearch)}"
+                    autocomplete="off"
+                >
+
+
+                <select
+                    id="passSite"
+                    class="filter-select"
+                >
+
+                    <option value="ALL">
+                        All Sites
+                    </option>
+
+                    ${sites.map(
+                        function (site) {
+
+                            return `
+
+                                <option
+                                    value="${escapeHtml(site)}"
+                                    ${
+                                        currentSite === site
+                                            ? "selected"
+                                            : ""
+                                    }
+                                >
+                                    ${escapeHtml(site)}
+                                </option>
+
+                            `;
+
+                        }
+                    ).join("")}
+
+                </select>
+
+
+                <select
+                    id="passStatus"
+                    class="filter-select"
+                >
+
+                    <option value="ALL">
+                        All Statuses
+                    </option>
+
+
+                    <option
+                        value="Issued"
+                        ${
+                            currentStatus === "Issued"
+                                ? "selected"
+                                : ""
+                        }
+                    >
+                        Issued
+                    </option>
+
+
+                    <option
+                        value="Pending"
+                        ${
+                            currentStatus === "Pending"
+                                ? "selected"
+                                : ""
+                        }
+                    >
+                        Pending
+                    </option>
+
+
+                    <option
+                        value="Rejected"
+                        ${
+                            currentStatus === "Rejected"
+                                ? "selected"
+                                : ""
+                        }
+                    >
+                        Rejected
+                    </option>
+
+                </select>
+
+
+                <div
+                    class="record-count"
+                    id="passRecordCount"
+                >
+
+                    ${filtered.length}
+                    of
+                    ${data.length}
+                    records
+
+                </div>
+
+
+            </div>
+
+
+            <div
+                class="table-container"
+                id="passTableContainer"
+            >
+
+                ${renderTable(filtered, adminMode)}
+
+            </div>
+
+        `;
+
+
+        var searchInput =
+            document.getElementById(
+                "passSearch"
+            );
+
+
+        if (searchInput) {
+
+            searchInput.addEventListener(
+                "input",
+                function () {
+
+                    currentSearch =
+                        this.value;
+
+
+                    updateDashboardResults(
+                        adminMode
+                    );
+
+                }
+            );
+
+        }
+
+
+        var siteSelect =
+            document.getElementById(
+                "passSite"
+            );
+
+
+        if (siteSelect) {
+
+            siteSelect.addEventListener(
+                "change",
+                function () {
+
+                    currentSite =
+                        this.value;
+
+
+                    updateDashboardResults(
+                        adminMode
+                    );
+
+                }
+            );
+
+        }
+
+
+        var statusSelect =
+            document.getElementById(
+                "passStatus"
+            );
+
+
+        if (statusSelect) {
+
+            statusSelect.addEventListener(
+                "change",
+                function () {
+
+                    currentStatus =
+                        this.value;
+
+
+                    updateDashboardResults(
+                        adminMode
+                    );
+
+                }
+            );
+
+        }
+
+
+        bindTableRows();
+
+        bindNavigation();
+
+    }
+
+
+    /*
+    ============================================================
+    UPDATE DASHBOARD RESULTS
+    ============================================================
+    */
+
+    function updateDashboardResults(adminMode) {
+
+        var filtered =
+            getFilteredData();
+
+
+        var tableContainer =
+            document.getElementById(
+                "passTableContainer"
+            );
+
+
+        var recordCount =
+            document.getElementById(
+                "passRecordCount"
+            );
+
+
+        if (recordCount) {
+
+            recordCount.textContent =
+                filtered.length +
+                " of " +
+                data.length +
+                " records";
+
+        }
+
+
+        if (tableContainer) {
+
+            tableContainer.innerHTML =
+                renderTable(
+                    filtered,
+                    adminMode
+                );
+
+        }
+
+
+        bindTableRows();
+
+    }
+
+
+    /*
+    ============================================================
+    RENDER TABLE
+    ============================================================
+    */
+
+    function renderTable(
+        filtered,
+        adminMode
+    ) {
+
+        if (filtered.length === 0) {
+
+            return `
+
+                <div class="empty-state">
+
+                    No records match your
+                    search or filters.
+
+                </div>
+
+            `;
+
+        }
+
+
+        return `
+
+            <table class="pass-table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>ID</th>
+
+                        <th>Pass Holder</th>
+
+                        ${
+                            adminMode
+                                ? "<th>Requester</th>"
+                                : ""
+                        }
+
+                        <th>Site</th>
+
+                        <th>Clearance</th>
+
+                        <th>Request Date</th>
+
+                        <th>Expiry</th>
+
+                        <th>Status</th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    ${filtered.map(
+                        function (record) {
+
+                            var status =
+                                getStatus(record);
+
+
+                            var expiry =
+                                getExpiry(record);
+
+
+                            return `
+
+                                <tr
+                                    data-record-id="${escapeHtml(record.ID)}"
+                                >
+
+                                    <td class="id-cell">
+                                        #${escapeHtml(record.ID)}
+                                    </td>
+
+
+                                    <td class="holder-cell">
+                                        ${escapeHtml(record.Pass_Holder)}
+                                    </td>
+
+
+                                    ${
+                                        adminMode
+                                        ?
+                                        `
+                                            <td>
+                                                ${escapeHtml(record.Pass_Requester)}
+                                            </td>
+                                        `
+                                        :
+                                        ""
+                                    }
+
+
+                                    <td>
+                                        ${escapeHtml(record.Site)}
+                                    </td>
+
+
+                                    <td>
+                                        ${escapeHtml(record.Clearance_Level)}
+                                    </td>
+
+
+                                    <td>
+                                        ${formatDate(record.RequestDate)}
+                                    </td>
+
+
+                                    <td>
+
+                                        ${formatDate(record.Expiry_Date)}
+
+                                        <div class="${expiry.className}">
+                                            ${escapeHtml(expiry.label)}
+                                        </div>
+
+                                    </td>
+
+
+                                    <td>
+
+                                        <span
+                                            class="status-pill ${status.className}"
+                                        >
+                                            ${escapeHtml(status.label)}
+                                        </span>
+
+                                    </td>
+
+                                </tr>
+
+                            `;
+
+                        }
+                    ).join("")}
+
+                </tbody>
+
+            </table>
+
+        `;
+
+    }
+
+
+    /*
+    ============================================================
+    BIND TABLE ROWS
+    ============================================================
+    */
+
+    function bindTableRows() {
+
+        var rows =
+            dashboard.querySelectorAll(
+                "#passTableContainer tbody tr"
+            );
+
+
+        rows.forEach(
+            function (row) {
+
+                row.addEventListener(
+                    "click",
+                    function () {
+
+                        var id =
+                            this.getAttribute(
+                                "data-record-id"
+                            );
+
+
+                        var record =
+                            data.find(
+                                function (item) {
+
+                                    return String(
+                                        item.ID
+                                    ) ===
+                                    String(id);
+
+                                }
+                            );
+
+
+                        if (record) {
+
+                            showDetails(
+                                record
+                            );
+
+                        }
+
+                    }
+                );
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    DETAILS MODAL
+    ============================================================
+    */
+
+    function showDetails(record) {
+
+        var status =
+            getStatus(record);
+
+
+        var expiry =
+            getExpiry(record);
+
+
+        var overlay =
+            document.createElement(
+                "div"
+            );
+
+
+        overlay.className =
+            "details-overlay";
+
+
+        overlay.innerHTML = `
+
+            <div class="details-modal">
+
+
+                <div class="modal-header">
+
+                    <h2>
+                        Pass Request #${escapeHtml(record.ID)}
+                    </h2>
+
+
+                    <button
+                        class="close-button"
+                        type="button"
+                    >
+                        ×
+                    </button>
+
+                </div>
+
+
+                <div class="modal-body">
+
+
+                    <div class="detail-grid">
+
+
+                        <div class="detail-section">
+
+                            <div class="detail-section-title">
+                                Pass Details
+                            </div>
+
+
+                            <div class="detail-section-body">
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Status
+                                    </div>
+
+                                    <div class="detail-value">
+
+                                        <span
+                                            class="status-pill ${status.className}"
+                                        >
+                                            ${escapeHtml(status.label)}
+                                        </span>
+
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Pass Holder
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.Pass_Holder)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        National Insurance Number
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.NI)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Site
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.Site)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Clearance
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.Clearance_Level)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Request Date
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${formatDate(record.RequestDate)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Required Date
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${formatDate(record.Required_Date)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Expiry Date
+                                    </div>
+
+                                    <div class="detail-value">
+
+                                        ${formatDate(record.Expiry_Date)}
+
+                                        <div class="${expiry.className}">
+                                            ${escapeHtml(expiry.label)}
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="detail-section">
+
+                            <div class="detail-section-title">
+                                People
+                            </div>
+
+
+                            <div class="detail-section-body">
+
+
+                                ${
+                                    record.Author &&
+                                    record.Author.Picture
+
+                                    ?
+
+                                    `
+
+                                        <div class="person">
+
+                                            <img
+                                                src="${escapeHtml(record.Author.Picture)}"
+                                                alt=""
+                                            >
+
+                                            <div>
+
+                                                <div class="person-name">
+                                                    ${escapeHtml(record.Author.DisplayName)}
+                                                </div>
+
+                                                <div class="person-email">
+                                                    ${escapeHtml(record.Author.Email)}
+                                                </div>
+
+                                            </div>
+
+                                        </div>
+
+                                    `
+
+                                    :
+
+                                    ""
+
+                                }
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Requester
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.Pass_Requester)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Department
+                                    </div>
+
+                                    <div class="detail-value">
+
+                                        ${
+                                            record.Author
+                                                ? escapeHtml(
+                                                    record.Author.Department
+                                                )
+                                                : ""
+                                        }
+
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Job Title
+                                    </div>
+
+                                    <div class="detail-value">
+
+                                        ${
+                                            record.Author
+                                                ? escapeHtml(
+                                                    record.Author.JobTitle
+                                                )
+                                                : ""
+                                        }
+
+                                    </div>
+
+                                </div>
+
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="detail-section detail-section-full">
+
+                            <div class="detail-section-title">
+                                Access Permissions
+                            </div>
+
+
+                            <div class="detail-section-body">
+
+                                <div class="access-tags">
+
+                                    ${accessTags(record.Access)}
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="detail-section detail-section-full">
+
+                            <div class="detail-section-title">
+                                Justification
+                            </div>
+
+
+                            <div class="detail-section-body">
+
+                                <div class="justification">
+
+                                    ${escapeHtml(
+                                        record.Justification
+                                    )}
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="detail-section detail-section-full">
+
+                            <div class="detail-section-title">
+                                Record Information
+                            </div>
+
+
+                            <div class="detail-section-body">
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Record ID
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.ID)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Created
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${formatDateTime(record.Created)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Modified
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${formatDateTime(record.Modified)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Status Detail
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.Status)}
+                                    </div>
+
+                                </div>
+
+
+                            </div>
+
+                        </div>
+
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        `;
+
+
+        document.body.appendChild(
+            overlay
+        );
+
+
+        overlay
+            .querySelector(
+                ".close-button"
+            )
+            .addEventListener(
+                "click",
+                function () {
+
+                    overlay.remove();
+
+                }
+            );
+
+
+        overlay.addEventListener(
+            "click",
+            function (event) {
+
+                if (
+                    event.target ===
+                    overlay
+                ) {
+
+                    overlay.remove();
+
+                }
+
+            }
+        );
+
+
+        function closeOnEscape(event) {
+
+            if (
+                event.key ===
+                "Escape"
+            ) {
+
+                overlay.remove();
+
+
+                document.removeEventListener(
+                    "keydown",
+                    closeOnEscape
+                );
+
+            }
+
+        }
+
+
+        document.addEventListener(
+            "keydown",
+            closeOnEscape
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    LOAD DATA FROM SHAREPOINT
+    ============================================================
+    */
+
+    function loadData() {
+
+        console.log(
+            "Pass Dashboard: Loading SharePoint data..."
+        );
+
+
+        var url =
+            LIST_API_URL +
+            "?$orderby=ID%20desc";
+
+
+        console.log(
+            "SharePoint API URL:",
+            url
+        );
+
+
+        fetch(
+            url,
+            {
+                method: "GET",
+
+                credentials:
+                    "same-origin",
+
+                headers: {
+
+                    "Accept":
+                        "application/json;odata=verbose"
+
+                },
+
+                cache:
+                    "no-store"
+
+            }
+        )
+
+        .then(
+            function (response) {
+
+                if (!response.ok) {
+
+                    return response.text()
+                        .then(
+                            function (text) {
+
+                                console.error(
+                                    "SharePoint API error response:",
+                                    text
+                                );
+
+
+                                throw new Error(
+                                    "SharePoint returned HTTP " +
+                                    response.status +
+                                    " - " +
+                                    text
+                                );
+
+                            }
+                        );
+
+                }
+
+
+                return response.json();
+
+            }
+        )
+
+        .then(
+            function (json) {
+
+                console.log(
+                    "SharePoint response:",
+                    json
+                );
+
+
+                if (
+                    !json ||
+                    !json.d ||
+                    !Array.isArray(
+                        json.d.results
+                    )
+                ) {
+
+                    throw new Error(
+                        "SharePoint returned an unexpected response format."
+                    );
+
+                }
+
+
+                allData =
+                    json.d.results;
+
+
+                console.log(
+                    "Total SharePoint records loaded:",
+                    allData.length
+                );
+
+
+                if (
+                    currentView ===
+                    "admin"
+                ) {
+
+                    if (isAdmin) {
+
+                        prepareAdminDashboard();
+
+                    }
+                    else {
+
+                        currentView =
+                            "home";
+
+                        renderHome();
+
+                    }
+
+                }
+
+                else if (
+                    currentView ===
+                    "dashboard"
+                ) {
+
+                    prepareUserDashboard();
+
+                }
+
+                else if (
+                    currentView ===
+                    "submit"
+                ) {
+
+                    return;
+
+                }
+
+                else {
+
+                    renderHome();
+
+                }
+
+            }
+        )
+
+        .catch(
+            function (error) {
+
+                console.error(
+                    "Pass Dashboard: Unable to load SharePoint data.",
+                    error
+                );
+
+
+                dashboard.innerHTML = `
+
+                    <div class="error-state">
+
+                        <h2>
+                            Unable to load pass data
+                        </h2>
+
+                        <p>
+                            The dashboard could not retrieve
+                            your Building Pass records from SharePoint.
+                        </p>
+
+                        <p>
+                            <strong>Error:</strong>
+                            ${escapeHtml(
+                                error.message
+                            )}
+                        </p>
+
+                        <p>
+                            Please check that you have access
+                            to the Building Pass register.
+                        </p>
+
+                    </div>
+
+                `;
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    START APPLICATION
+    ============================================================
+    */
+
+    Promise.all(
+        [
+            getCurrentUser(),
+            getAvailableSites()
+        ]
+    )
+    .then(
+        function () {
+
+            console.log(
+                "SharePoint user and Site list loaded."
+            );
+
+
+            renderHome();
+
+
+            loadData();
+
+        }
+    )
+    .catch(
+        function (error) {
+
+            console.error(
+                "Pass application initialisation failed.",
+                error
+            );
+
+
+            renderHome();
+
+
+            loadData();
+
+        }
+    );
+
+
+    /*
+    ============================================================
+    AUTOMATIC REFRESH
+    ============================================================
+
+    Refresh every 5 minutes.
+
+    ============================================================
+    */
+
+    setInterval(
+        function () {
+
+            loadData();
+
+        },
+        5 * 60 * 1000
+    );
+
+
+    console.log(
+        "Pass Dashboard initialised."
+    );
+
+
+})();

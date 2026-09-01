@@ -42,6 +42,10 @@ var dashboardPeriod = 1;
         "NSV Workbook";
 
 
+    var APPLICATIONS_LIST_TITLE =
+        "NSV Applications";
+
+
     var MAX_ATTACHMENT_SIZE =
         25 * 1024 * 1024;
 
@@ -137,6 +141,24 @@ var dashboardPeriod = 1;
     var columnWidths = {};
 
     var sortState = {
+        field: null,
+        direction: "asc"
+    };
+
+
+    /* ============================================================
+       APPLICATIONS STATE
+       ============================================================ */
+
+    var allApplicationItems = [];
+
+    var filteredApplicationItems = [];
+
+    var applicationsMode = false;
+
+    var selectedApplicationItem = null;
+
+    var applicationSortState = {
         field: null,
         direction: "asc"
     };
@@ -541,6 +563,16 @@ var dashboardPeriod = 1;
 >
     <span class="nsv-action-icon" aria-hidden="true">▤</span>
     Dashboards
+</button>
+
+                <button
+    id="nsv-applications"
+    class="nsv-action-button"
+    type="button"
+    aria-pressed="false"
+>
+    <span class="nsv-action-icon" aria-hidden="true">➜</span>
+    Applications
 </button>
 
             </div>
@@ -1589,6 +1621,13 @@ updateKpis();
 
 if (dashboardMode) {
     renderDashboard();
+} else if (applicationsMode) {
+    /*
+     * The Applications tab is currently on screen. The
+     * Workbook data (and KPIs) just refreshed in the
+     * background, but the visible table should stay on
+     * Applications rather than being replaced here.
+     */
 } else {
     renderTable();
 }
@@ -1596,10 +1635,14 @@ if (dashboardMode) {
 updatePanelDescription();
 
 
-        setStatus(
-            allItems.length +
-            " records loaded successfully."
-        );
+        if (!applicationsMode) {
+
+            setStatus(
+                allItems.length +
+                " records loaded successfully."
+            );
+
+        }
 
     }
 
@@ -2077,6 +2120,8 @@ updatePanelDescription();
         filterType
     ) {
 
+        exitApplicationsModeIfActive();
+
         activeFilter =
             filterType;
 
@@ -2091,6 +2136,8 @@ updatePanelDescription();
 
 
     function applyExpiredFilter() {
+
+        exitApplicationsModeIfActive();
 
         activeFilter =
             "expired";
@@ -2107,6 +2154,8 @@ updatePanelDescription();
 
     function applyRenewalFilter() {
 
+        exitApplicationsModeIfActive();
+
         activeFilter =
             "renewal";
 
@@ -2121,6 +2170,8 @@ updatePanelDescription();
 
 
     function clearAllFilters() {
+
+        exitApplicationsModeIfActive();
 
         activeFilter =
             null;
@@ -2217,6 +2268,19 @@ updatePanelDescription();
 
     function search(text) {
 
+        if (applicationsMode) {
+
+            applyApplicationsFilter();
+
+            renderApplicationsTable();
+
+            updatePanelDescription();
+
+            return;
+
+        }
+
+
         applyCurrentFilter();
 
         renderTable();
@@ -2239,6 +2303,62 @@ updatePanelDescription();
 
 
         if (!description) {
+
+            return;
+
+        }
+
+
+        if (applicationsMode) {
+
+            var applicationCount =
+                filteredApplicationItems.length;
+
+
+            description.textContent =
+                applicationCount.toLocaleString(
+                    "en-GB"
+                ) +
+                " application record" +
+                (
+                    applicationCount === 1
+                        ? ""
+                        : "s"
+                );
+
+
+            if (applicationSortState.field) {
+
+                var sortedApplicationColumn =
+                    columns.find(
+                        function (column) {
+
+                            return (
+                                column.field ===
+                                applicationSortState.field
+                            );
+
+                        }
+                    );
+
+
+                if (sortedApplicationColumn) {
+
+                    description.textContent +=
+                        " • Sorted by " +
+                        sortedApplicationColumn.header +
+                        " (" +
+                        (
+                            applicationSortState.direction === "asc"
+                                ? "A–Z"
+                                : "Z–A"
+                        ) +
+                        ")";
+
+                }
+
+            }
+
 
             return;
 
@@ -2961,11 +3081,38 @@ function toggleDashboardMode() {
     var button =
         byId("nsv-dashboards");
 
+    var applicationsButton =
+        byId("nsv-applications");
+
     var searchInput =
         byId("nsv-search");
 
 
     if (dashboardMode) {
+
+        /*
+         * Dashboards, Records and Applications are mutually
+         * exclusive views. Turning Dashboards on always
+         * turns Applications off.
+         */
+        if (applicationsMode) {
+
+            applicationsMode = false;
+
+            if (applicationsButton) {
+
+                applicationsButton.classList.remove(
+                    "nsv-update-active"
+                );
+
+                applicationsButton.setAttribute(
+                    "aria-pressed",
+                    "false"
+                );
+
+            }
+
+        }
 
         button.classList.add("nsv-update-active");
         button.setAttribute("aria-pressed", "true");
@@ -3424,6 +3571,8 @@ function toggleDashboardMode() {
        ============================================================ */
 
     function toggleUpdateMode() {
+
+        exitApplicationsModeIfActive();
 
         updateMode =
             !updateMode;
@@ -3961,6 +4110,8 @@ document.body.classList.add(
 
 
     function openAddModal() {
+
+        exitApplicationsModeIfActive();
 
         selectedItem =
             null;
@@ -5970,6 +6121,13 @@ byId("nsv-dashboards").addEventListener(
     }
 );
 
+byId("nsv-applications").addEventListener(
+    "click",
+    function () {
+        toggleApplicationsMode();
+    }
+);
+
     byId(
         "nsv-search"
     ).addEventListener(
@@ -6209,6 +6367,1241 @@ byId("nsv-dashboards").addEventListener(
                 `;
 
             }
+
+        }
+
+    }
+
+
+    /* ============================================================
+       APPLICATIONS: LOAD ITEMS
+       ============================================================ */
+
+    async function loadApplicationItems() {
+
+        setStatus(
+            "Loading NSV Applications..."
+        );
+
+
+        var url =
+
+            SITE_URL +
+
+            "/_api/web/lists/GetByTitle('" +
+
+            encodeURIComponent(
+                APPLICATIONS_LIST_TITLE
+            ) +
+
+            "')/items?$top=5000";
+
+
+        var result =
+            await apiGet(
+                url
+            );
+
+
+        allApplicationItems =
+            result.value || [];
+
+
+        applyApplicationsFilter();
+
+        renderApplicationsTable();
+
+        updatePanelDescription();
+
+
+        setStatus(
+            allApplicationItems.length +
+            " applications loaded successfully."
+        );
+
+    }
+
+
+    /* ============================================================
+       APPLICATIONS: FILTER
+       ============================================================ */
+
+    function applyApplicationsFilter() {
+
+        var searchInput =
+            byId(
+                "nsv-search"
+            );
+
+        var searchText =
+            searchInput
+                ? searchInput.value
+                    .toLowerCase()
+                    .trim()
+                : "";
+
+
+        filteredApplicationItems =
+            allApplicationItems.filter(
+                function (item) {
+
+                    return (
+                        !searchText ||
+                        itemMatchesSearch(
+                            item,
+                            searchText
+                        )
+                    );
+
+                }
+            );
+
+    }
+
+
+    /* ============================================================
+       APPLICATIONS: SORTING
+       ============================================================ */
+
+    function sortApplicationItems() {
+
+        if (!applicationSortState.field) {
+
+            return;
+
+        }
+
+
+        var column =
+            columns.find(
+                function (item) {
+
+                    return (
+                        item.field ===
+                        applicationSortState.field
+                    );
+
+                }
+            );
+
+
+        if (!column) {
+
+            return;
+
+        }
+
+
+        filteredApplicationItems.sort(
+            function (a, b) {
+
+                var valueA =
+                    getSortValue(
+                        a,
+                        column
+                    );
+
+
+                var valueB =
+                    getSortValue(
+                        b,
+                        column
+                    );
+
+
+                if (
+                    valueA === valueB
+                ) {
+
+                    return 0;
+
+                }
+
+
+                var result =
+                    valueA <
+                    valueB
+                        ? -1
+                        : 1;
+
+
+                return (
+                    applicationSortState.direction === "asc"
+                        ? result
+                        : -result
+                );
+
+            }
+        );
+
+    }
+
+
+    function handleApplicationColumnSort(
+        field
+    ) {
+
+        if (
+            applicationSortState.field === field
+        ) {
+
+            applicationSortState.direction =
+                applicationSortState.direction === "asc"
+                    ? "desc"
+                    : "asc";
+
+        }
+        else {
+
+            applicationSortState.field =
+                field;
+
+            applicationSortState.direction =
+                "asc";
+
+        }
+
+
+        sortApplicationItems();
+
+        renderApplicationsTable();
+
+        updatePanelDescription();
+
+    }
+
+
+    /* ============================================================
+       APPLICATIONS: RENDER TABLE
+       ============================================================ */
+
+    function renderApplicationsTable() {
+
+        var tableContainer =
+            byId(
+                "nsv-table-container"
+            );
+
+
+        if (
+            !filteredApplicationItems.length
+        ) {
+
+            tableContainer.innerHTML = `
+
+                <div class="nsv-empty">
+                    No applications found.
+                </div>
+
+            `;
+
+            return;
+
+        }
+
+
+        sortApplicationItems();
+
+
+        var html = `
+
+            <table class="nsv-table">
+
+                <colgroup>
+
+        `;
+
+
+        columns.forEach(
+            function (column) {
+
+                var width =
+                    columnWidths[
+                        column.field
+                    ] ||
+                    getDefaultColumnWidth(
+                        column.field
+                    );
+
+
+                html += `
+
+                    <col
+                        data-column-field="${escapeHtml(
+                            column.field
+                        )}"
+                        style="width:${width}px;"
+                    >
+
+                `;
+
+            }
+        );
+
+
+        html += `
+
+                </colgroup>
+
+                <thead>
+
+                    <tr>
+
+        `;
+
+
+        columns.forEach(
+            function (column, index) {
+
+                var sortIndicator =
+                    "";
+
+
+                if (
+                    applicationSortState.field ===
+                    column.field
+                ) {
+
+                    sortIndicator =
+                        applicationSortState.direction === "asc"
+                            ? " ▲"
+                            : " ▼";
+
+                }
+
+
+                html += `
+
+                    <th
+                        data-column-index="${index}"
+                        data-column-field="${escapeHtml(
+                            column.field
+                        )}"
+                        class="nsv-sortable-header nsv-applications-sortable-header"
+                        title="Click to sort"
+                    >
+
+                        <div class="nsv-th-content">
+
+                            <span
+                                class="nsv-sort-label"
+                                data-sort-field="${escapeHtml(
+                                    column.field
+                                )}"
+                            >
+                                ${escapeHtml(
+                                    column.header
+                                )}${sortIndicator}
+                            </span>
+
+                            <span
+                                class="nsv-column-resizer"
+                                data-column-index="${index}"
+                                title="Drag to resize column"
+                            ></span>
+
+                        </div>
+
+                    </th>
+
+                `;
+
+            }
+        );
+
+
+        html += `
+
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+        `;
+
+
+        filteredApplicationItems.forEach(
+            function (item) {
+
+                html += `
+
+                    <tr
+                        class="nsv-row-clickable"
+                        data-item-id="${escapeHtml(
+                            item.ID
+                        )}"
+                    >
+
+                `;
+
+
+                columns.forEach(
+                    function (column) {
+
+                        html += `
+
+                            <td
+                                data-column-field="${escapeHtml(
+                                    column.field
+                                )}"
+                            >
+                                ${formatValue(
+                                    item[
+                                        column.field
+                                    ],
+                                    column.type
+                                )}
+                            </td>
+
+                        `;
+
+                    }
+                );
+
+
+                html += `
+
+                    </tr>
+
+                `;
+
+            }
+        );
+
+
+        html += `
+
+                </tbody>
+
+            </table>
+
+        `;
+
+
+        tableContainer.innerHTML =
+            html;
+
+
+        attachColumnResizeHandlers();
+
+        attachApplicationColumnSortHandlers();
+
+        attachApplicationRowClickHandlers();
+
+    }
+
+
+    /* ============================================================
+       APPLICATIONS: COLUMN SORT HANDLERS
+       ============================================================ */
+
+    function attachApplicationColumnSortHandlers() {
+
+        var headers =
+            document.querySelectorAll(
+                ".nsv-applications-sortable-header"
+            );
+
+
+        headers.forEach(
+            function (header) {
+
+                header.addEventListener(
+                    "click",
+                    function (event) {
+
+                        if (
+                            event.target.classList.contains(
+                                "nsv-column-resizer"
+                            )
+                        ) {
+
+                            return;
+
+                        }
+
+
+                        var field =
+                            header.getAttribute(
+                                "data-column-field"
+                            );
+
+
+                        if (field) {
+
+                            handleApplicationColumnSort(
+                                field
+                            );
+
+                        }
+
+                    }
+                );
+
+            }
+        );
+
+    }
+
+
+    /* ============================================================
+       APPLICATIONS: ROW CLICK
+       ============================================================ */
+
+    function attachApplicationRowClickHandlers() {
+
+        var rows =
+            document.querySelectorAll(
+                ".nsv-table tbody tr"
+            );
+
+
+        rows.forEach(
+            function (row) {
+
+                row.addEventListener(
+                    "click",
+                    function (event) {
+
+                        if (
+                            event.target.classList.contains(
+                                "nsv-column-resizer"
+                            )
+                        ) {
+
+                            return;
+
+                        }
+
+
+                        var itemId =
+                            Number(
+                                row.getAttribute(
+                                    "data-item-id"
+                                )
+                            );
+
+
+                        var item =
+                            allApplicationItems.find(
+                                function (record) {
+
+                                    return Number(
+                                        record.ID
+                                    ) ===
+                                    itemId;
+
+                                }
+                            );
+
+
+                        if (!item) {
+
+                            return;
+
+                        }
+
+
+                        selectedApplicationItem =
+                            item;
+
+
+                        openApplicationModal(
+                            item
+                        );
+
+                    }
+                );
+
+            }
+        );
+
+    }
+
+
+    /* ============================================================
+       APPLICATIONS: TOGGLE MODE
+       ============================================================ */
+
+    function exitApplicationsModeIfActive() {
+
+        if (!applicationsMode) {
+
+            return;
+
+        }
+
+
+        applicationsMode =
+            false;
+
+
+        var button =
+            byId(
+                "nsv-applications"
+            );
+
+
+        if (button) {
+
+            button.classList.remove(
+                "nsv-update-active"
+            );
+
+            button.setAttribute(
+                "aria-pressed",
+                "false"
+            );
+
+        }
+
+    }
+
+
+    function toggleApplicationsMode() {
+
+        applicationsMode = !applicationsMode;
+
+
+        var button =
+            byId("nsv-applications");
+
+        var dashboardsButton =
+            byId("nsv-dashboards");
+
+        var searchInput =
+            byId("nsv-search");
+
+
+        if (applicationsMode) {
+
+            /*
+             * Dashboards, Records and Applications are mutually
+             * exclusive views. Turning Applications on always
+             * turns Dashboards off.
+             */
+            if (dashboardMode) {
+
+                dashboardMode = false;
+
+                if (dashboardsButton) {
+
+                    dashboardsButton.classList.remove(
+                        "nsv-update-active"
+                    );
+
+                    dashboardsButton.setAttribute(
+                        "aria-pressed",
+                        "false"
+                    );
+
+                }
+
+            }
+
+
+            /*
+             * Update mode is a Records-table concept (editable
+             * rows). It has no meaning on the Applications
+             * table, so switch it off if it was left on.
+             */
+            if (updateMode) {
+
+                updateMode = false;
+
+
+                var updateButton =
+                    byId(
+                        "nsv-update-clearance"
+                    );
+
+                var updateHint =
+                    byId(
+                        "nsv-update-hint"
+                    );
+
+
+                if (updateButton) {
+
+                    updateButton.classList.remove(
+                        "nsv-update-active"
+                    );
+
+                    updateButton.setAttribute(
+                        "aria-pressed",
+                        "false"
+                    );
+
+                }
+
+
+                if (updateHint) {
+
+                    updateHint.style.display =
+                        "none";
+
+                }
+
+            }
+
+            button.classList.add("nsv-update-active");
+            button.setAttribute("aria-pressed", "true");
+
+            if (searchInput) {
+                searchInput.disabled = false;
+            }
+
+            loadApplicationItems().catch(
+                function (error) {
+
+                    console.error(
+                        "NSV Applications load error:",
+                        error
+                    );
+
+                    setStatus(
+                        "ERROR: " +
+                        error.message
+                    );
+
+                }
+            );
+
+        }
+        else {
+
+            button.classList.remove("nsv-update-active");
+            button.setAttribute("aria-pressed", "false");
+
+            if (searchInput) {
+                searchInput.disabled = false;
+            }
+
+            renderTable();
+
+            updatePanelDescription();
+
+            setStatus("Viewing table.");
+
+        }
+
+    }
+
+
+    /* ============================================================
+       APPLICATIONS: MODAL
+       ============================================================ */
+
+    function openApplicationModal(
+        item
+    ) {
+
+        closeModal();
+
+
+        var fieldsHtml =
+            "";
+
+
+        TABLE_COLUMNS.forEach(
+            function (column) {
+
+                fieldsHtml +=
+                    buildReadOnlyField(
+                        column,
+                        formatModalValue(
+                            item[
+                                column.field
+                            ],
+                            column.type
+                        )
+                    );
+
+            }
+        );
+
+
+        var modal =
+            document.createElement(
+                "div"
+            );
+
+
+        modal.id =
+            "nsv-modal-overlay";
+
+
+        modal.className =
+            "nsv-modal-overlay";
+
+
+        modal.innerHTML = `
+
+            <div
+                class="nsv-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="nsv-modal-title"
+            >
+
+                <div class="nsv-modal-header">
+
+                    <div>
+
+                        <h2
+                            id="nsv-modal-title"
+                            class="nsv-modal-title"
+                        >
+                            Application: ${escapeHtml(
+                                getFieldValue(
+                                    item,
+                                    "field_6"
+                                )
+                            )}
+                        </h2>
+
+                        <p class="nsv-modal-description">
+                            Review the application, then confirm to move it to the overall NSV register.
+                        </p>
+
+                    </div>
+
+                    <button
+                        type="button"
+                        id="nsv-modal-close"
+                        class="nsv-modal-close"
+                        aria-label="Close"
+                    >
+                        &#215;
+                    </button>
+
+                </div>
+
+                <div
+                    id="nsv-modal-error"
+                    class="nsv-modal-error"
+                    style="display:none;"
+                ></div>
+
+                <div class="nsv-form">
+
+                    <div class="nsv-form-grid">
+
+                        ${fieldsHtml}
+
+                    </div>
+
+                    <div class="nsv-modal-footer">
+
+                        <button
+                            type="button"
+                            id="nsv-modal-cancel"
+                            class="nsv-modal-button nsv-secondary-button"
+                        >
+                            Close
+                        </button>
+
+                        <button
+                            type="button"
+                            id="nsv-modal-confirm-complete"
+                            class="nsv-modal-button nsv-primary-button"
+                        >
+                            Confirm Complete
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        `;
+
+
+        document.body.appendChild(
+            modal
+        );
+
+
+        document.body.classList.add(
+            "nsv-modal-open"
+        );
+
+
+        attachApplicationModalEvents(
+            item
+        );
+
+    }
+
+
+    function attachApplicationModalEvents(
+        item
+    ) {
+
+        var closeButton =
+            byId(
+                "nsv-modal-close"
+            );
+
+        var cancelButton =
+            byId(
+                "nsv-modal-cancel"
+            );
+
+        var confirmButton =
+            byId(
+                "nsv-modal-confirm-complete"
+            );
+
+
+        if (closeButton) {
+
+            closeButton.addEventListener(
+                "click",
+                closeModal
+            );
+
+        }
+
+
+        if (cancelButton) {
+
+            cancelButton.addEventListener(
+                "click",
+                closeModal
+            );
+
+        }
+
+
+        if (confirmButton) {
+
+            confirmButton.addEventListener(
+                "click",
+                function () {
+
+                    confirmCompleteApplication(
+                        item
+                    );
+
+                }
+            );
+
+        }
+
+
+        var overlay =
+            byId(
+                "nsv-modal-overlay"
+            );
+
+
+        if (overlay) {
+
+            overlay.addEventListener(
+                "click",
+                function (event) {
+
+                    if (
+                        event.target ===
+                        overlay
+                    ) {
+
+                        closeModal();
+
+                    }
+
+                }
+            );
+
+        }
+
+
+        document.addEventListener(
+            "keydown",
+            modalEscapeHandler
+        );
+
+    }
+
+
+    /* ============================================================
+       APPLICATIONS: CONFIRM COMPLETE
+       ============================================================ */
+
+    async function confirmCompleteApplication(
+        item
+    ) {
+
+        if (
+            !item ||
+            !item.ID
+        ) {
+
+            showModalError(
+                "The selected application could not be identified."
+            );
+
+            return;
+
+        }
+
+
+        var confirmButton =
+            byId(
+                "nsv-modal-confirm-complete"
+            );
+
+        var cancelButton =
+            byId(
+                "nsv-modal-cancel"
+            );
+
+
+        if (confirmButton) {
+
+            confirmButton.disabled =
+                true;
+
+            confirmButton.classList.add(
+                "nsv-button-loading"
+            );
+
+            confirmButton.textContent =
+                "Moving...";
+
+        }
+
+
+        if (cancelButton) {
+
+            cancelButton.disabled =
+                true;
+
+        }
+
+
+        /*
+         * Copy every field that exists on TABLE_COLUMNS
+         * (the schema is shared between the Applications
+         * list and the NSV Workbook list) straight across.
+         */
+        var data = {};
+
+        TABLE_COLUMNS.forEach(
+            function (column) {
+
+                var value =
+                    item[
+                        column.field
+                    ];
+
+                data[
+                    column.field
+                ] =
+                    value === undefined
+                        ? null
+                        : value;
+
+            }
+        );
+
+
+        var createdInWorkbook =
+            false;
+
+
+        try {
+
+            setStatus(
+                "Adding record to the NSV register..."
+            );
+
+
+            var createUrl =
+
+                SITE_URL +
+
+                "/_api/web/lists/GetByTitle('" +
+
+                encodeURIComponent(
+                    LIST_TITLE
+                ) +
+
+                "')/items";
+
+
+            var createDigest =
+                await getRequestDigest();
+
+
+            await apiPost(
+                createUrl,
+                JSON.stringify(
+                    data
+                ),
+                {
+                    "Content-Type":
+                        "application/json;odata=nometadata",
+
+                    "X-RequestDigest":
+                        createDigest
+                }
+            );
+
+
+            createdInWorkbook =
+                true;
+
+
+            setStatus(
+                "Removing application from NSV Applications..."
+            );
+
+
+            var deleteUrl =
+
+                SITE_URL +
+
+                "/_api/web/lists/GetByTitle('" +
+
+                encodeURIComponent(
+                    APPLICATIONS_LIST_TITLE
+                ) +
+
+                "')/items(" +
+
+                item.ID +
+
+                ")";
+
+
+            var deleteDigest =
+                await getRequestDigest();
+
+
+            await apiDelete(
+                deleteUrl,
+                {
+                    "X-RequestDigest":
+                        deleteDigest
+                }
+            );
+
+
+            closeModal();
+
+
+            selectedApplicationItem =
+                null;
+
+
+            await loadItems();
+
+            await loadApplicationItems();
+
+
+            setStatus(
+                "Successfully moved to overall NSV register."
+            );
+
+        }
+        catch (error) {
+
+            console.error(
+                "Confirm complete error:",
+                error
+            );
+
+
+            if (!createdInWorkbook) {
+
+                /*
+                 * The record was never created in the
+                 * Workbook, so the application is untouched
+                 * and it is safe to let the user retry.
+                 */
+                showModalError(
+                    (
+                        error &&
+                        error.message
+                    )
+                        ? error.message
+                        : "Unable to add the record to the NSV register."
+                );
+
+
+                if (confirmButton) {
+
+                    confirmButton.disabled =
+                        false;
+
+                    confirmButton.classList.remove(
+                        "nsv-button-loading"
+                    );
+
+                    confirmButton.textContent =
+                        "Confirm Complete";
+
+                }
+
+
+                if (cancelButton) {
+
+                    cancelButton.disabled =
+                        false;
+
+                }
+
+
+                setStatus(
+                    "ERROR: " +
+                    (
+                        error &&
+                        error.message
+                            ? error.message
+                            : "Unable to add the record to the NSV register."
+                    )
+                );
+
+                return;
+
+            }
+
+
+            /*
+             * The record WAS created in the Workbook but the
+             * delete from Applications failed. Do not let the
+             * button be clicked again — that would create a
+             * duplicate Workbook record. Surface a clear,
+             * actionable message instead.
+             */
+            showModalError(
+                "The record was added to the NSV register, but could not be removed from " +
+                "NSV Applications (ID " +
+                item.ID +
+                "). Please delete it manually from NSV Applications to avoid a duplicate."
+            );
+
+
+            setStatus(
+                "ERROR: record added to NSV register, but the application record (ID " +
+                item.ID +
+                ") could not be removed automatically. Please delete it manually."
+            );
+
+
+            if (cancelButton) {
+
+                cancelButton.disabled =
+                    false;
+
+            }
+
+
+            await loadItems();
 
         }
 

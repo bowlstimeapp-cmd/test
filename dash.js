@@ -1,695 +1,65 @@
-javascript:
 (function () {
 
     "use strict";
 
-    console.log("NSV Dashboard JS started");
+
+    /*
+    ============================================================
+    CONFIGURATION
+    ============================================================
+    */
 
 
-    /* ============================================================
-       DASHBOARD CONTAINER
-       ============================================================ */
+    /*
+    ============================================================
+    SELECTED PASS HOLDER
+    ============================================================
+    */
 
-    var dashboardContainer =
-        document.getElementById("passDashboard");
+    var selectedPassHolder = null;
 
-
-    if (!dashboardContainer) {
-
-        console.error(
-            "NSV Dashboard: passDashboard was not found."
-        );
-
-        return;
-
-    }
+    var passHolderSearchTimer = null;
 
 
-    /* ============================================================
-       CONFIGURATION
-       ============================================================ */
-
-
-var dashboardMode = false;
-var dashboardPeriod = 1;
-
-
-    var SITE_URL =
-        "https://mcga.sharepoint.com/sites/InformationAssurance";
-
-
-    var LIST_TITLE =
-        "NSV Workbook";
-
-
-    var APPLICATIONS_LIST_TITLE =
-        "NSV Applications";
-
+    /*
+    ============================================================
+    ATTACHMENT CONFIGURATION
+    ============================================================
+    */
 
     var MAX_ATTACHMENT_SIZE =
-        25 * 1024 * 1024;
+        10 * 1024 * 1024;
 
+    var ALLOWED_ATTACHMENT_TYPES = [
+        "image/jpeg",
+        "image/png",
+         "application/pdf"
+    ];
 
-    var TABLE_COLUMNS = [
-
-        {
-            field: "field_6",
-            header: "Full Name",
-            type: "text"
-        },
-
-        {
-            field: "field_2",
-            header: "Organisation",
-            type: "text"
-        },
-
-        {
-            field: "field_5",
-            header: "Directorate",
-            type: "text"
-        },
-
-        {
-            field: "Role",
-            header: "Role",
-            type: "text"
-        },
-
-        {
-            field: "field_10",
-            header: "Email Address",
-            type: "text"
-        },
-
-        {
-            field: "field_14",
-            header: "DOB",
-            type: "date"
-        },
-
-        {
-            field: "field_13",
-            header: "Clearance Level",
-            type: "status"
-        },
-
-        {
-            field: "field_15",
-            header: "Valid From",
-            type: "date"
-        },
-
-        {
-            field: "field_16",
-            header: "Valid To",
-            type: "date"
-        },
-
-        {
-            field: "field_9",
-            header: "National Insurance",
-            type: "text"
-        },
-
-        {
-            field: "field_4",
-            header: "Leaving Date",
-            type: "date"
-        }
-
+    var ALLOWED_ATTACHMENT_EXTENSIONS = [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".pdf"
     ];
 
 
-    /* ============================================================
-       STATE
-       ============================================================ */
-
-    var allItems = [];
-
-    var filteredItems = [];
-
-    var columns =
-        TABLE_COLUMNS.slice();
-
-    var activeFilter = null;
-
-    var updateMode = false;
-
-    var selectedItem = null;
-
-    var columnWidths = {};
-
-    var sortState = {
-        field: null,
-        direction: "asc"
-    };
-
-
-    /* ============================================================
-       APPLICATIONS STATE
-       ============================================================ */
-
-    var allApplicationItems = [];
-
-    var filteredApplicationItems = [];
-
-    var applicationsMode = false;
-
-    var selectedApplicationItem = null;
-
-    var applicationSortState = {
-        field: null,
-        direction: "asc"
-    };
-
-
-    /* ============================================================
-       TABLE CONTAINER RESIZING
-       ============================================================ */
-
-    var panelResizeState = null;
-
-
-    function attachPanelResizeHandler() {
-
-        var handle =
-            document.querySelector(
-                ".nsv-panel-resize-handle"
-            );
-
-
-        if (!handle) {
-
-            return;
-
-        }
-
-
-        handle.addEventListener(
-            "mousedown",
-            startPanelResize
-        );
-
-    }
-
-
-    function startPanelResize(event) {
-
-        event.preventDefault();
-        event.stopPropagation();
-
-
-        var panel =
-            document.querySelector(
-                ".nsv-panel-resizable"
-            );
-
-
-        if (!panel) {
-
-            return;
-
-        }
-
-
-        panelResizeState = {
-
-            startX:
-                event.clientX,
-
-            startWidth:
-                panel.getBoundingClientRect().width
-
-        };
-
-
-        document.body.style.cursor =
-            "col-resize";
-
-        document.body.style.userSelect =
-            "none";
-
-
-        document.addEventListener(
-            "mousemove",
-            handlePanelResize
-        );
-
-        document.addEventListener(
-            "mouseup",
-            stopPanelResize
-        );
-
-    }
-
-
-    function handlePanelResize(event) {
-
-        if (!panelResizeState) {
-
-            return;
-
-        }
-
-
-        var panel =
-            document.querySelector(
-                ".nsv-panel-resizable"
-            );
-
-
-        if (!panel) {
-
-            return;
-
-        }
-
-
-        var delta =
-            event.clientX -
-            panelResizeState.startX;
-
-
-        var newWidth =
-            panelResizeState.startWidth +
-            delta;
-
-
-        newWidth =
-            Math.max(
-                700,
-                Math.min(
-                    1800,
-                    newWidth
-                )
-            );
-
-
-        panel.style.width =
-            Math.round(
-                newWidth
-            ) +
-            "px";
-
-    }
-
-
-    function stopPanelResize() {
-
-        panelResizeState =
-            null;
-
-
-        document.body.style.cursor =
-            "";
-
-        document.body.style.userSelect =
-            "";
-
-
-        document.removeEventListener(
-            "mousemove",
-            handlePanelResize
-        );
-
-        document.removeEventListener(
-            "mouseup",
-            stopPanelResize
-        );
-
-    }
-
-
-    /* ============================================================
-       PAGE HTML
-       ============================================================ */
-
-    dashboardContainer.innerHTML = `
-
-        <div class="nsv-dashboard">
-
-            <div class="nsv-header">
-
-                <div>
-
-                    <h1 class="nsv-title">
-                        NSV Workbook Dashboard
-                    </h1>
-
-                    <p class="nsv-subtitle">
-                        Information Assurance
-                    </p>
-
-                </div>
-
-                <button
-                    id="nsv-refresh"
-                    class="nsv-button"
-                    type="button"
-                >
-                    Refresh
-                </button>
-
-            </div>
-
-
-            <div
-                id="nsv-status"
-                class="nsv-status"
-            >
-                Connecting to SharePoint...
-            </div>
-
-
-            <div class="nsv-kpi-grid">
-
-                <div class="nsv-kpi-card">
-
-                    <div class="nsv-kpi-label">
-                        Total Records
-                    </div>
-
-                    <div
-                        id="nsv-total"
-                        class="nsv-kpi-value"
-                    >
-                        —
-                    </div>
-
-                    <div class="nsv-kpi-detail">
-                        All clearance holders
-                    </div>
-
-                    <div
-                        id="nsv-total-expired"
-                        class="nsv-kpi-footer"
-                    >
-                        Total Expired: —
-                    </div>
-
-                </div>
-
-
-                <div
-                    id="nsv-mca-kpi"
-                    class="nsv-kpi-card nsv-kpi-clickable"
-                    role="button"
-                    tabindex="0"
-                    title="Filter table to MCA personnel"
-                >
-
-                    <div class="nsv-kpi-label">
-                        MCA
-                    </div>
-
-                    <div
-                        id="nsv-mca"
-                        class="nsv-kpi-value"
-                    >
-                        —
-                    </div>
-
-                    <div class="nsv-kpi-detail">
-                        Click to filter by Organisation
-                    </div>
-
-                    <div
-                        id="nsv-mca-expired"
-                        class="nsv-kpi-footer"
-                    >
-                        MCA Expired: —
-                    </div>
-
-                </div>
-
-
-                <div
-                    id="nsv-contractor-kpi"
-                    class="nsv-kpi-card nsv-kpi-clickable"
-                    role="button"
-                    tabindex="0"
-                    title="Filter table to contractors"
-                >
-
-                    <div class="nsv-kpi-label">
-                        Contractors
-                    </div>
-
-                    <div
-                        id="nsv-contractors"
-                        class="nsv-kpi-value"
-                    >
-                        —
-                    </div>
-
-                    <div class="nsv-kpi-detail">
-                        Click to filter by Organisation
-                    </div>
-
-                    <div
-                        id="nsv-contractor-expired"
-                        class="nsv-kpi-footer"
-                    >
-                        Contractor Expired: —
-                    </div>
-
-                </div>
-
-
-                <div class="nsv-kpi-card">
-
-                    <div class="nsv-kpi-label">
-                        Last Modified
-                    </div>
-
-                    <div
-                        id="nsv-modified"
-                        class="nsv-kpi-value nsv-kpi-date"
-                    >
-                        —
-                    </div>
-
-                    <div class="nsv-kpi-detail">
-                        NSV Workbook
-                    </div>
-
-                </div>
-
-            </div>
-
-
-            <div class="nsv-actions">
-
-                <button
-                    id="nsv-add-clearance"
-                    class="nsv-action-button nsv-primary-button"
-                    type="button"
-                >
-
-                    <span
-                        class="nsv-action-icon"
-                        aria-hidden="true"
-                    >
-                        +
-                    </span>
-
-                    Add new clearance holder
-
-                </button>
-
-
-                <button
-                    id="nsv-update-clearance"
-                    class="nsv-action-button"
-                    type="button"
-                    aria-pressed="false"
-                >
-
-                    <span
-                        class="nsv-action-icon"
-                        aria-hidden="true"
-                    >
-                        ✎
-                    </span>
-
-                    Update a clearance
-
-                </button>
-
-
-                <button
-                    id="nsv-expired-clearance"
-                    class="nsv-action-button"
-                    type="button"
-                    aria-pressed="false"
-                >
-
-                    <span
-                        class="nsv-action-icon"
-                        aria-hidden="true"
-                    >
-                        !
-                    </span>
-
-                    Filter by expired
-
-                </button>
-
-
-                <button
-                    id="nsv-renewal-filter"
-                    class="nsv-action-button"
-                    type="button"
-                    aria-pressed="false"
-                >
-
-                    <span
-                        class="nsv-action-icon"
-                        aria-hidden="true"
-                    >
-                        ↻
-                    </span>
-
-                    Filter by Renewal
-
-                </button>
-
-                <button
-    id="nsv-dashboards"
-    class="nsv-action-button"
-    type="button"
-    aria-pressed="false"
->
-    <span class="nsv-action-icon" aria-hidden="true">▤</span>
-    Dashboards
-</button>
-
-                <button
-    id="nsv-applications"
-    class="nsv-action-button"
-    type="button"
-    aria-pressed="false"
->
-    <span class="nsv-action-icon" aria-hidden="true">➜</span>
-    Applications
-</button>
-
-            </div>
-
-
-            <div class="nsv-panel nsv-panel-resizable">
-
-                <div
-                    class="nsv-panel-resize-handle"
-                    title="Drag to resize table width"
-                    aria-label="Resize table width"
-                ></div>
-
-
-                <div class="nsv-panel-header">
-
-                    <div>
-
-                        <h2 class="nsv-panel-title">
-                            NSV Workbook
-                        </h2>
-
-                        <p
-                            id="nsv-panel-description"
-                            class="nsv-panel-description"
-                        >
-                            SharePoint list records
-                        </p>
-
-                    </div>
-
-
-                    <input
-                        id="nsv-search"
-                        class="nsv-search"
-                        type="search"
-                        placeholder="Search records..."
-                        autocomplete="off"
-                    >
-
-                </div>
-
-
-                <div
-                    id="nsv-update-hint"
-                    class="nsv-update-hint"
-                    style="display:none;"
-                >
-                    Update mode is active. Click a row to edit that
-                    clearance holder.
-                </div>
-
-
-                <div
-                    id="nsv-table-container"
-                    class="nsv-table-container"
-                >
-
-                    <div class="nsv-loading">
-                        Loading records...
-                    </div>
-
-                </div>
-
-            </div>
-
-        </div>
-
-    `;
-
-
-    /* ============================================================
-       BASIC HELPERS
-       ============================================================ */
-
-    function byId(id) {
-
-        return document.getElementById(id);
-
-    }
-
-
-    function setStatus(message) {
-
-        var element =
-            byId("nsv-status");
-
-
-        if (element) {
-
-            element.textContent =
-                message;
-
-        }
-
-    }
-
-
-    function getFieldValue(
-        item,
-        field
-    ) {
-
-        if (!item) {
-
-            return "";
-
-        }
-
-
-        var value =
-            item[field];
-
+    /*
+    ============================================================
+    ATTACHMENT HELPER FUNCTIONS
+
+    These are used throughout the attachment upload code
+    (file input validation, size display, SharePoint filename
+    handling, and error messages).
+    ============================================================
+    */
+
+    function formatFileSize(bytes) {
 
         if (
-            value === null ||
-            value === undefined
+            bytes === null ||
+            bytes === undefined ||
+            isNaN(bytes)
         ) {
 
             return "";
@@ -697,5341 +67,510 @@ var dashboardPeriod = 1;
         }
 
 
-        return String(value);
+        if (bytes < 1024) {
 
-    }
-
-
-    /* ============================================================
-       DATE / EXPIRY / RENEWAL HELPERS
-       ============================================================ */
-
-    function getDateOnly(value) {
-
-        if (!value) {
-
-            return null;
+            return bytes + " B";
 
         }
 
 
-        var date =
-            new Date(value);
+        if (bytes < 1024 * 1024) {
 
-
-        if (
-            isNaN(
-                date.getTime()
-            )
-        ) {
-
-            return null;
+            return (
+                bytes / 1024
+            ).toFixed(1) + " KB";
 
         }
-
-
-        date.setHours(
-            0,
-            0,
-            0,
-            0
-        );
-
-
-        return date;
-
-    }
-
-
-    function isExpired(item) {
-
-        var validTo =
-            getFieldValue(
-                item,
-                "field_16"
-            );
-
-
-        if (!validTo) {
-
-            return false;
-
-        }
-
-
-        var expiryDate =
-            getDateOnly(
-                validTo
-            );
-
-
-        if (!expiryDate) {
-
-            return false;
-
-        }
-
-
-        var today =
-            new Date();
-
-
-        today.setHours(
-            0,
-            0,
-            0,
-            0
-        );
-
-
-        return expiryDate < today;
-
-    }
-
-
-    function isDueForRenewal(item) {
-
-        var validTo =
-            getFieldValue(
-                item,
-                "field_16"
-            );
-
-
-        if (!validTo) {
-
-            return false;
-
-        }
-
-
-        var expiryDate =
-            getDateOnly(
-                validTo
-            );
-
-
-        if (!expiryDate) {
-
-            return false;
-
-        }
-
-
-        var today =
-            new Date();
-
-
-        today.setHours(
-            0,
-            0,
-            0,
-            0
-        );
-
-
-        var renewalDate =
-            new Date(today);
-
-
-        renewalDate.setDate(
-            renewalDate.getDate() + 90
-        );
 
 
         return (
-            expiryDate >= today &&
-            expiryDate <= renewalDate
-        );
-
-    };
-
-    function getDailyCreatedCounts() {
-
-    var now = new Date();
-    var year = now.getFullYear();
-    var month = now.getMonth();
-
-    var daysInMonth =
-        new Date(year, month + 1, 0).getDate();
-
-    var counts =
-        new Array(daysInMonth).fill(0);
-
-
-    allItems.forEach(function (item) {
-
-        var created =
-            item.Created
-                ? new Date(item.Created)
-                : null;
-
-
-        if (!created || isNaN(created.getTime())) {
-            return;
-        }
-
-
-        if (
-            created.getFullYear() === year &&
-            created.getMonth() === month
-        ) {
-            counts[created.getDate() - 1] += 1;
-        }
-
-    });
-
-
-    var labels =
-        counts.map(function (_, index) {
-            return String(index + 1);
-        });
-
-
-    return { labels: labels, values: counts };
-
-}
-
-
-function getMonthlyCreatedCounts(monthCount) {
-
-    var now = new Date();
-    var buckets = [];
-
-
-    for (var i = monthCount - 1; i >= 0; i--) {
-
-        var bucketDate =
-            new Date(now.getFullYear(), now.getMonth() - i, 1);
-
-
-        buckets.push({
-            year: bucketDate.getFullYear(),
-            month: bucketDate.getMonth(),
-            label: bucketDate.toLocaleDateString(
-                "en-GB",
-                { month: "short", year: "numeric" }
-            ),
-            count: 0
-        });
+            bytes / (1024 * 1024)
+        ).toFixed(1) + " MB";
 
     }
 
 
-    allItems.forEach(function (item) {
+    function getAttachmentExtension(fileName) {
 
-        var created =
-            item.Created
-                ? new Date(item.Created)
-                : null;
-
-
-        if (!created || isNaN(created.getTime())) {
-            return;
-        }
-
-
-        buckets.forEach(function (bucket) {
-
-            if (
-                created.getFullYear() === bucket.year &&
-                created.getMonth() === bucket.month
-            ) {
-                bucket.count += 1;
-            }
-
-        });
-
-    });
-
-
-    return {
-        labels: buckets.map(function (b) { return b.label; }),
-        values: buckets.map(function (b) { return b.count; })
-    };
-
-}
-
-    
-
-
-    /* ============================================================
-       SHAREPOINT API
-       ============================================================ */
-
-    async function apiGet(url) {
-
-        console.log(
-            "SharePoint REST GET:",
-            url
-        );
-
-
-        var response =
-            await fetch(
-                url,
-                {
-                    method: "GET",
-                    credentials: "same-origin",
-                    headers: {
-                        "Accept":
-                            "application/json;odata=nometadata"
-                    }
-                }
+        var safeName =
+            String(
+                fileName || ""
             );
 
 
-        if (!response.ok) {
-
-            var text = "";
-
-            try {
-
-                text =
-                    await response.text();
-
-            }
-            catch (e) {
-
-                text = "";
-
-            }
+        var lastDot =
+            safeName.lastIndexOf(".");
 
 
-            throw new Error(
-                "SharePoint API error: " +
-                response.status +
-                " " +
-                response.statusText +
-                "\n" +
-                text
-            );
+        if (lastDot === -1) {
+
+            return "";
 
         }
 
 
-        return await response.json();
+        return safeName.substring(
+            lastDot
+        ).toLowerCase();
 
     }
 
 
-    async function apiPost(
-        url,
-        body,
-        extraHeaders
-    ) {
-
-        var headers = {
-
-            "Accept":
-                "application/json;odata=nometadata"
-
-        };
-
-
-        if (extraHeaders) {
-
-            Object.keys(
-                extraHeaders
-            ).forEach(
-                function (key) {
-
-                    headers[key] =
-                        extraHeaders[key];
-
-                }
-            );
-
-        }
-
-
-        var response =
-            await fetch(
-                url,
-                {
-                    method: "POST",
-                    credentials: "same-origin",
-                    headers: headers,
-                    body: body
-                }
-            );
-
-
-        if (!response.ok) {
-
-            var text = "";
-
-            try {
-
-                text =
-                    await response.text();
-
-            }
-            catch (e) {
-
-                text = "";
-
-            }
-
-
-            throw new Error(
-                "SharePoint API error: " +
-                response.status +
-                " " +
-                response.statusText +
-                "\n" +
-                text
-            );
-
-        }
-
-
-        var responseText =
-            await response.text();
-
-
-        if (!responseText) {
-
-            return {};
-
-        }
-
-
-        try {
-
-            return JSON.parse(
-                responseText
-            );
-
-        }
-        catch (e) {
-
-            return {};
-
-        }
-
-    }
-
-
-    async function apiMerge(
-        url,
-        body,
-        extraHeaders
-    ) {
-
-        var headers = {
-
-            "Accept":
-                "application/json;odata=nometadata",
-
-            "Content-Type":
-                "application/json;odata=nometadata",
-
-            "IF-MATCH":
-                "*",
-
-            "X-HTTP-Method":
-                "MERGE"
-
-        };
-
-
-        if (extraHeaders) {
-
-            Object.keys(
-                extraHeaders
-            ).forEach(
-                function (key) {
-
-                    headers[key] =
-                        extraHeaders[key];
-
-                }
-            );
-
-        }
-
-
-        var response =
-            await fetch(
-                url,
-                {
-                    method: "POST",
-                    credentials: "same-origin",
-                    headers: headers,
-                    body: JSON.stringify(body)
-                }
-            );
-
-
-        if (!response.ok) {
-
-            var text = "";
-
-            try {
-
-                text =
-                    await response.text();
-
-            }
-            catch (e) {
-
-                text = "";
-
-            }
-
-
-            throw new Error(
-                "SharePoint API error: " +
-                response.status +
-                " " +
-                response.statusText +
-                "\n" +
-                text
-            );
-
-        }
-
-
-        return true;
-
-    }
-
-
-    async function apiDelete(
-        url,
-        extraHeaders
-    ) {
-
-        var headers = {
-
-            "Accept":
-                "application/json;odata=nometadata",
-
-            "IF-MATCH":
-                "*"
-
-        };
-
-
-        if (extraHeaders) {
-
-            Object.keys(
-                extraHeaders
-            ).forEach(
-                function (key) {
-
-                    headers[key] =
-                        extraHeaders[key];
-
-                }
-            );
-
-        }
-
-
-        var response =
-            await fetch(
-                url,
-                {
-                    method: "POST",
-                    credentials: "same-origin",
-                    headers: {
-                        "Accept":
-                            headers["Accept"],
-
-                        "IF-MATCH":
-                            headers["IF-MATCH"],
-
-                        "X-RequestDigest":
-                            headers["X-RequestDigest"],
-
-                        "X-HTTP-Method":
-                            "DELETE"
-                    }
-                }
-            );
-
-
-        if (!response.ok) {
-
-            var text = "";
-
-            try {
-
-                text =
-                    await response.text();
-
-            }
-            catch (e) {
-
-                text = "";
-
-            }
-
-
-            throw new Error(
-                "SharePoint API error: " +
-                response.status +
-                " " +
-                response.statusText +
-                "\n" +
-                text
-            );
-
-        }
-
-
-        return true;
-
-    }
-
-
-    /* ============================================================
-       REQUEST DIGEST
-       ============================================================ */
-
-    async function getRequestDigest() {
-
-        var url =
-            SITE_URL +
-            "/_api/contextinfo";
-
-
-        var response =
-            await fetch(
-                url,
-                {
-                    method: "POST",
-                    credentials: "same-origin",
-                    headers: {
-                        "Accept":
-                            "application/json;odata=verbose",
-
-                        "Content-Type":
-                            "application/json;odata=verbose"
-                    },
-                    body: ""
-                }
-            );
-
-
-        if (!response.ok) {
-
-            var text = "";
-
-            try {
-
-                text =
-                    await response.text();
-
-            }
-            catch (e) {
-
-                text = "";
-
-            }
-
-
-            throw new Error(
-                "Unable to obtain SharePoint request digest.\n" +
-                response.status +
-                " " +
-                response.statusText +
-                "\n" +
-                text
-            );
-
-        }
-
-
-        var data =
-            await response.json();
-
-
-        if (
-            data &&
-            data.d &&
-            data.d.GetContextWebInformation
-        ) {
-
-            return data
-                .d
-                .GetContextWebInformation
-                .FormDigestValue;
-
-        }
-
-
-        if (
-            data &&
-            data.GetContextWebInformation
-        ) {
-
-            return data
-                .GetContextWebInformation
-                .FormDigestValue;
-
-        }
-
-
-        throw new Error(
-            "SharePoint request digest was not returned."
-        );
-
-    }
-
-
-    /* ============================================================
-       PDF UPLOAD
-       ============================================================ */
-
-    async function uploadPdfAttachment(
-        itemId,
-        file
-    ) {
+    function validateAttachmentFile(file) {
 
         if (!file) {
 
-            return null;
+            return {
+
+                valid: false,
+
+                message:
+                    "No file was selected."
+
+            };
 
         }
 
 
-        var fileName =
-            String(
-                file.name || ""
-            );
+        if (file.size > MAX_ATTACHMENT_SIZE) {
+
+            return {
+
+                valid: false,
+
+                message:
+                    "File is too large. Maximum file size is 10 MB."
+
+            };
+
+        }
 
 
         var extension =
-            fileName
-                .split(".")
-                .pop()
-                .toLowerCase();
-
-
-        if (extension !== "pdf") {
-
-            throw new Error(
-                "The clearance document must be a PDF file."
-            );
-
-        }
-
-
-        if (
-            file.type &&
-            file.type !== "application/pdf"
-        ) {
-
-            throw new Error(
-                "The selected clearance document is not recognised as a PDF."
-            );
-
-        }
-
-
-        if (
-            file.size >
-            MAX_ATTACHMENT_SIZE
-        ) {
-
-            throw new Error(
-                "The PDF is too large. The maximum permitted size is 25 MB."
-            );
-
-        }
-
-
-        setStatus(
-            "Uploading clearance PDF..."
-        );
-
-
-        var digest =
-            await getRequestDigest();
-
-
-        var safeFileName =
-            fileName.replace(
-                /[\\/:*?"<>|#%]/g,
-                "_"
+            getAttachmentExtension(
+                file.name
             );
 
 
-        var attachmentUrl =
-
-            SITE_URL +
-
-            "/_api/web/lists/GetByTitle('" +
-
-            encodeURIComponent(
-                LIST_TITLE
-            ) +
-
-            "')/items(" +
-
-            itemId +
-
-            ")/AttachmentFiles/add(FileName='" +
-
-            encodeURIComponent(
-                safeFileName
-            ) +
-
-            "')";
-
-
-        var response =
-            await fetch(
-                attachmentUrl,
-                {
-                    method: "POST",
-                    credentials: "same-origin",
-
-                    headers: {
-
-                        "Accept":
-                            "application/json;odata=nometadata",
-
-                        "X-RequestDigest":
-                            digest,
-
-                        "Content-Type":
-                            "application/pdf"
-
-                    },
-
-                    body: file
-                }
-            );
-
-
-        if (!response.ok) {
-
-            var text = "";
-
-            try {
-
-                text =
-                    await response.text();
-
-            }
-            catch (e) {
-
-                text = "";
-
-            }
-
-
-            throw new Error(
-                "PDF upload failed: " +
-                response.status +
-                " " +
-                response.statusText +
-                "\n" +
-                text
-            );
-
-        }
-
-
-        return true;
-
-    }
-
-
-    /* ============================================================
-       LOAD LIST
-       ============================================================ */
-
-    async function loadList() {
-
-        setStatus(
-            "Reading NSV Workbook..."
-        );
-
-
-        var listUrl =
-
-            SITE_URL +
-
-            "/_api/web/lists/GetByTitle('" +
-
-            encodeURIComponent(
-                LIST_TITLE
-            ) +
-
-            "')?$select=Title,ItemCount,LastItemModifiedDate";
-
-
-        var list =
-            await apiGet(
-                listUrl
-            );
-
-
-        byId(
-            "nsv-modified"
-        ).textContent =
-            formatDate(
-                list.LastItemModifiedDate
-            );
-
-    }
-
-
-    /* ============================================================
-       LOAD ITEMS
-       ============================================================ */
-
-    async function loadItems() {
-
-        setStatus(
-            "Loading NSV Workbook records..."
-        );
-
-
-        var url =
-
-            SITE_URL +
-
-            "/_api/web/lists/GetByTitle('" +
-
-            encodeURIComponent(
-                LIST_TITLE
-            ) +
-
-            "')/items?$top=5000";
-
-
-        var result =
-            await apiGet(
-                url
-            );
-
-
-        allItems =
-            result.value || [];
-
-
-applyCurrentFilter();
-updateKpis();
-
-if (dashboardMode) {
-    renderDashboard();
-} else if (applicationsMode) {
-    /*
-     * The Applications tab is currently on screen. The
-     * Workbook data (and KPIs) just refreshed in the
-     * background, but the visible table should stay on
-     * Applications rather than being replaced here.
-     */
-} else {
-    renderTable();
-}
-
-updatePanelDescription();
-
-
-        if (!applicationsMode) {
-
-            setStatus(
-                allItems.length +
-                " records loaded successfully."
-            );
-
-        }
-
-    }
-
-
-    /* ============================================================
-       KPI CALCULATIONS
-       ============================================================ */
-
-    function updateKpis() {
-
-        var total =
-            allItems.length;
-
-
-        var totalExpired =
-            allItems.filter(
-                function (item) {
-
-                    return isExpired(
-                        item
-                    );
-
-                }
-            ).length;
-
-
-        var mcaItems =
-            allItems.filter(
-                function (item) {
-
-                    return getFieldValue(
-                        item,
-                        "field_2"
-                    )
-                        .trim()
-                        .toLowerCase() ===
-                        "mca";
-
-                }
-            );
-
-
-        var mcaCount =
-            mcaItems.length;
-
-
-        var mcaExpired =
-            mcaItems.filter(
-                function (item) {
-
-                    return isExpired(
-                        item
-                    );
-
-                }
-            ).length;
-
-
-        var contractorItems =
-            allItems.filter(
-                function (item) {
-
-                    return getFieldValue(
-                        item,
-                        "field_2"
-                    )
-                        .toLowerCase()
-                        .includes(
-                            "contractor"
-                        );
-
-                }
-            );
-
-
-        var contractorCount =
-            contractorItems.length;
-
-
-        var contractorExpired =
-            contractorItems.filter(
-                function (item) {
-
-                    return isExpired(
-                        item
-                    );
-
-                }
-            ).length;
-
-
-        byId(
-            "nsv-total"
-        ).textContent =
-            total.toLocaleString(
-                "en-GB"
-            );
-
-
-        byId(
-            "nsv-mca"
-        ).textContent =
-            mcaCount.toLocaleString(
-                "en-GB"
-            );
-
-
-        byId(
-            "nsv-contractors"
-        ).textContent =
-            contractorCount.toLocaleString(
-                "en-GB"
-            );
-
-
-        byId(
-            "nsv-total-expired"
-        ).textContent =
-            "Total Expired: " +
-            totalExpired.toLocaleString(
-                "en-GB"
-            );
-
-
-        byId(
-            "nsv-mca-expired"
-        ).textContent =
-            "MCA Expired: " +
-            mcaExpired.toLocaleString(
-                "en-GB"
-            );
-
-
-        byId(
-            "nsv-contractor-expired"
-        ).textContent =
-            "Contractor Expired: " +
-            contractorExpired.toLocaleString(
-                "en-GB"
-            );
-
-    }
-
-
-    /* ============================================================
-       FILTER BUTTON STATE
-       ============================================================ */
-
-    function clearActiveKpiClasses() {
-
-        var mca =
-            byId(
-                "nsv-mca-kpi"
-            );
-
-
-        var contractor =
-            byId(
-                "nsv-contractor-kpi"
-            );
-
-
-        if (mca) {
-
-            mca.classList.remove(
-                "nsv-kpi-active"
-            );
-
-        }
-
-
-        if (contractor) {
-
-            contractor.classList.remove(
-                "nsv-kpi-active"
-            );
-
-        }
-
-    }
-
-
-    function updateExpiredButton() {
-
-        var button =
-            byId(
-                "nsv-expired-clearance"
-            );
-
-
-        if (!button) {
-
-            return;
-
-        }
-
-
-        var active =
-            activeFilter === "expired";
-
-
-        button.classList.toggle(
-            "nsv-update-active",
-            active
-        );
-
-
-        button.setAttribute(
-            "aria-pressed",
-            active ? "true" : "false"
-        );
-
-    }
-
-
-    function updateRenewalButton() {
-
-        var button =
-            byId(
-                "nsv-renewal-filter"
-            );
-
-
-        if (!button) {
-
-            return;
-
-        }
-
-
-        var active =
-            activeFilter === "renewal";
-
-
-        button.classList.toggle(
-            "nsv-filter-active",
-            active
-        );
-
-
-        button.classList.toggle(
-            "nsv-update-active",
-            active
-        );
-
-
-        button.setAttribute(
-            "aria-pressed",
-            active ? "true" : "false"
-        );
-
-    }
-
-
-    /* ============================================================
-       SEARCH MATCHING
-       ============================================================ */
-
-    function itemMatchesSearch(
-        item,
-        searchText
-    ) {
-
-        return TABLE_COLUMNS.some(
-            function (column) {
-
-                var value =
-                    item[
-                        column.field
-                    ];
-
-
-                return String(
-                    value === null ||
-                    value === undefined
-                        ? ""
-                        : value
-                )
-                    .toLowerCase()
-                    .includes(
-                        searchText
-                    );
-
-            }
-        );
-
-    }
-
-
-    /* ============================================================
-       FILTER LOGIC
-       ============================================================ */
-
-    function applyCurrentFilter() {
-
-        var searchInput =
-            byId(
-                "nsv-search"
-            );
-
-
-        var searchText =
-            searchInput
-                ? searchInput.value
-                    .toLowerCase()
-                    .trim()
-                : "";
-
-
-        clearActiveKpiClasses();
-
-
-        if (
-            activeFilter === "mca"
-        ) {
-
-            byId(
-                "nsv-mca-kpi"
-            ).classList.add(
-                "nsv-kpi-active"
-            );
-
-
-            filteredItems =
-                allItems.filter(
-                    function (item) {
-
-                        var organisation =
-                            getFieldValue(
-                                item,
-                                "field_2"
-                            )
-                                .trim()
-                                .toLowerCase();
-
-
-                        return (
-                            organisation ===
-                            "mca" &&
-
-                            (
-                                !searchText ||
-                                itemMatchesSearch(
-                                    item,
-                                    searchText
-                                )
-                            )
-                        );
-
-                    }
-                );
-
-        }
-        else if (
-            activeFilter === "contractor"
-        ) {
-
-            byId(
-                "nsv-contractor-kpi"
-            ).classList.add(
-                "nsv-kpi-active"
-            );
-
-
-            filteredItems =
-                allItems.filter(
-                    function (item) {
-
-                        var organisation =
-                            getFieldValue(
-                                item,
-                                "field_2"
-                            )
-                                .toLowerCase();
-
-
-                        return (
-                            organisation.includes(
-                                "contractor"
-                            ) &&
-
-                            (
-                                !searchText ||
-                                itemMatchesSearch(
-                                    item,
-                                    searchText
-                                )
-                            )
-                        );
-
-                    }
-                );
-
-        }
-        else if (
-            activeFilter === "expired"
-        ) {
-
-            filteredItems =
-                allItems.filter(
-                    function (item) {
-
-                        return (
-                            isExpired(
-                                item
-                            ) &&
-
-                            (
-                                !searchText ||
-                                itemMatchesSearch(
-                                    item,
-                                    searchText
-                                )
-                            )
-                        );
-
-                    }
-                );
-
-        }
-        else if (
-            activeFilter === "renewal"
-        ) {
-
-            filteredItems =
-                allItems.filter(
-                    function (item) {
-
-                        return (
-                            isDueForRenewal(
-                                item
-                            ) &&
-
-                            (
-                                !searchText ||
-                                itemMatchesSearch(
-                                    item,
-                                    searchText
-                                )
-                            )
-                        );
-
-                    }
-                );
-
-        }
-        else {
-
-            filteredItems =
-                allItems.filter(
-                    function (item) {
-
-                        return (
-                            !searchText ||
-                            itemMatchesSearch(
-                                item,
-                                searchText
-                            )
-                        );
-
-                    }
-                );
-
-        }
-
-
-        updateExpiredButton();
-
-        updateRenewalButton();
-
-    }
-
-
-    function applyOrganisationFilter(
-        filterType
-    ) {
-
-        exitApplicationsModeIfActive();
-
-        activeFilter =
-            filterType;
-
-
-        applyCurrentFilter();
-
-        renderTable();
-
-        updatePanelDescription();
-
-    }
-
-
-    function applyExpiredFilter() {
-
-        exitApplicationsModeIfActive();
-
-        activeFilter =
-            "expired";
-
-
-        applyCurrentFilter();
-
-        renderTable();
-
-        updatePanelDescription();
-
-    }
-
-
-    function applyRenewalFilter() {
-
-        exitApplicationsModeIfActive();
-
-        activeFilter =
-            "renewal";
-
-
-        applyCurrentFilter();
-
-        renderTable();
-
-        updatePanelDescription();
-
-    }
-
-
-    function clearAllFilters() {
-
-        exitApplicationsModeIfActive();
-
-        activeFilter =
-            null;
-
-
-        applyCurrentFilter();
-
-        renderTable();
-
-        updatePanelDescription();
-
-    }
-
-
-    function toggleMcaFilter() {
-
-        if (
-            activeFilter === "mca"
-        ) {
-
-            clearAllFilters();
-
-        }
-        else {
-
-            applyOrganisationFilter(
-                "mca"
-            );
-
-        }
-
-    }
-
-
-    function toggleContractorFilter() {
-
-        if (
-            activeFilter === "contractor"
-        ) {
-
-            clearAllFilters();
-
-        }
-        else {
-
-            applyOrganisationFilter(
-                "contractor"
-            );
-
-        }
-
-    }
-
-
-    function toggleExpiredFilter() {
-
-        if (
-            activeFilter === "expired"
-        ) {
-
-            clearAllFilters();
-
-        }
-        else {
-
-            applyExpiredFilter();
-
-        }
-
-    }
-
-
-    function toggleRenewalFilter() {
-
-        if (
-            activeFilter === "renewal"
-        ) {
-
-            clearAllFilters();
-
-        }
-        else {
-
-            applyRenewalFilter();
-
-        }
-
-    }
-
-
-    /* ============================================================
-       SEARCH
-       ============================================================ */
-
-    function search(text) {
-
-        if (applicationsMode) {
-
-            applyApplicationsFilter();
-
-            renderApplicationsTable();
-
-            updatePanelDescription();
-
-            return;
-
-        }
-
-
-        applyCurrentFilter();
-
-        renderTable();
-
-        updatePanelDescription();
-
-    }
-
-
-    /* ============================================================
-       PANEL DESCRIPTION
-       ============================================================ */
-
-    function updatePanelDescription() {
-
-        var description =
-            byId(
-                "nsv-panel-description"
-            );
-
-
-        if (!description) {
-
-            return;
-
-        }
-
-
-        if (applicationsMode) {
-
-            var applicationCount =
-                filteredApplicationItems.length;
-
-
-            description.textContent =
-                applicationCount.toLocaleString(
-                    "en-GB"
-                ) +
-                " application record" +
-                (
-                    applicationCount === 1
-                        ? ""
-                        : "s"
-                );
-
-
-            if (applicationSortState.field) {
-
-                var sortedApplicationColumn =
-                    columns.find(
-                        function (column) {
-
-                            return (
-                                column.field ===
-                                applicationSortState.field
-                            );
-
-                        }
-                    );
-
-
-                if (sortedApplicationColumn) {
-
-                    description.textContent +=
-                        " • Sorted by " +
-                        sortedApplicationColumn.header +
-                        " (" +
-                        (
-                            applicationSortState.direction === "asc"
-                                ? "A–Z"
-                                : "Z–A"
-                        ) +
-                        ")";
-
-                }
-
-            }
-
-
-            return;
-
-        }
-
-
-        var count =
-            filteredItems.length;
-
-
-        if (
-            activeFilter === "mca"
-        ) {
-
-            description.textContent =
-                count.toLocaleString(
-                    "en-GB"
-                ) +
-                " MCA records";
-
-        }
-        else if (
-            activeFilter === "contractor"
-        ) {
-
-            description.textContent =
-                count.toLocaleString(
-                    "en-GB"
-                ) +
-                " Contractor records";
-
-        }
-        else if (
-            activeFilter === "expired"
-        ) {
-
-            description.textContent =
-                count.toLocaleString(
-                    "en-GB"
-                ) +
-                " expired records";
-
-        }
-        else if (
-            activeFilter === "renewal"
-        ) {
-
-            description.textContent =
-                count.toLocaleString(
-                    "en-GB"
-                ) +
-                " records due for renewal within 90 days";
-
-        }
-        else {
-
-            description.textContent =
-                count.toLocaleString(
-                    "en-GB"
-                ) +
-                " SharePoint list records";
-
-        }
-
-
-        if (sortState.field) {
-
-            var sortedColumn =
-                columns.find(
-                    function (column) {
-
-                        return (
-                            column.field ===
-                            sortState.field
-                        );
-
-                    }
-                );
-
-
-            if (sortedColumn) {
-
-                description.textContent +=
-                    " • Sorted by " +
-                    sortedColumn.header +
-                    " (" +
-                    (
-                        sortState.direction === "asc"
-                            ? "A–Z"
-                            : "Z–A"
-                    ) +
-                    ")";
-
-            }
-
-        }
-
-    }
-
-
-    /* ============================================================
-       SORTING
-       ============================================================ */
-
-    function getSortValue(
-        item,
-        column
-    ) {
-
-        var value =
-            item[
-                column.field
-            ];
-
-
-        if (
-            value === null ||
-            value === undefined
-        ) {
-
-            return "";
-
-        }
-
-
-        if (
-            column.type === "date"
-        ) {
-
-            var date =
-                new Date(value);
-
-
-            if (
-                !isNaN(
-                    date.getTime()
-                )
-            ) {
-
-                return date.getTime();
-
-            }
-
-
-            return 0;
-
-        }
-
-
-        return String(value)
-            .trim()
-            .toLowerCase();
-
-    }
-
-
-    function sortItems() {
-
-        if (!sortState.field) {
-
-            return;
-
-        }
-
-
-        var column =
-            columns.find(
-                function (item) {
-
-                    return (
-                        item.field ===
-                        sortState.field
-                    );
-
-                }
-            );
-
-
-        if (!column) {
-
-            return;
-
-        }
-
-
-        filteredItems.sort(
-            function (a, b) {
-
-                var valueA =
-                    getSortValue(
-                        a,
-                        column
-                    );
-
-
-                var valueB =
-                    getSortValue(
-                        b,
-                        column
-                    );
-
-
-                if (
-                    valueA === valueB
-                ) {
-
-                    return 0;
-
-                }
-
-
-                var result =
-                    valueA <
-                    valueB
-                        ? -1
-                        : 1;
-
-
-                return (
-                    sortState.direction === "asc"
-                        ? result
-                        : -result
-                );
-
-            }
-        );
-
-    }
-
-
-    function handleColumnSort(
-        field
-    ) {
-
-        if (
-            sortState.field === field
-        ) {
-
-            sortState.direction =
-                sortState.direction === "asc"
-                    ? "desc"
-                    : "asc";
-
-        }
-        else {
-
-            sortState.field =
-                field;
-
-            sortState.direction =
-                "asc";
-
-        }
-
-
-        sortItems();
-
-        renderTable();
-
-        updatePanelDescription();
-
-    }
-
-
-function buildLineChartSvg(labels, values) {
-
-    var width = 640;
-    var height = 260;
-    var paddingLeft = 40;
-    var paddingRight = 20;
-    var paddingTop = 20;
-    var paddingBottom = 40;
-
-    var maxValue =
-        Math.max.apply(null, values.concat([1]));
-
-    var chartWidth =
-        width - paddingLeft - paddingRight;
-
-    var chartHeight =
-        height - paddingTop - paddingBottom;
-
-    var stepX =
-        values.length > 1
-            ? chartWidth / (values.length - 1)
-            : 0;
-
-
-    var points =
-        values.map(function (value, index) {
-
-            var x =
-                paddingLeft + (stepX * index);
-
-            var y =
-                paddingTop + chartHeight -
-                ((value / maxValue) * chartHeight);
-
-            return { x: x, y: y, value: value };
-
-        });
-
-
-    var pathData =
-        points.map(function (point, index) {
-            return (
-                (index === 0 ? "M" : "L") +
-                point.x.toFixed(1) + "," +
-                point.y.toFixed(1)
-            );
-        }).join(" ");
-
-
-    var circles =
-        points.map(function (point) {
-            return (
-                '<circle cx="' + point.x.toFixed(1) +
-                '" cy="' + point.y.toFixed(1) +
-                '" r="3" fill="var(--nsv-accent)"></circle>'
-            );
-        }).join("");
-
-
-    var labelInterval =
-        Math.max(1, Math.ceil(labels.length / 12));
-
-    var labelsHtml =
-        points.map(function (point, index) {
-
-            if (
-                index % labelInterval !== 0 &&
-                index !== points.length - 1
-            ) {
-                return "";
-            }
-
-            return (
-                '<text x="' + point.x.toFixed(1) +
-                '" y="' + (height - 12) +
-                '" font-size="10" text-anchor="middle" fill="var(--nsv-muted)">' +
-                escapeHtml(labels[index]) +
-                '</text>'
-            );
-
-        }).join("");
-
-
-    var gridLines = "";
-    var gridCount = 4;
-
-    for (var i = 0; i <= gridCount; i++) {
-
-        var gridY =
-            paddingTop + (chartHeight / gridCount) * i;
-
-        var gridValue =
-            Math.round(maxValue - (maxValue / gridCount) * i);
-
-        gridLines +=
-            '<line x1="' + paddingLeft +
-            '" y1="' + gridY.toFixed(1) +
-            '" x2="' + (width - paddingRight) +
-            '" y2="' + gridY.toFixed(1) +
-            '" stroke="var(--nsv-border)" stroke-width="1"></line>';
-
-        gridLines +=
-            '<text x="' + (paddingLeft - 8) +
-            '" y="' + (gridY + 4).toFixed(1) +
-            '" font-size="10" text-anchor="end" fill="var(--nsv-muted)">' +
-            gridValue +
-            '</text>';
-
-    }
-
-
-    return (
-        '<svg viewBox="0 0 ' + width + ' ' + height +
-        '" class="nsv-chart-svg">' +
-        gridLines +
-        '<path d="' + pathData +
-        '" fill="none" stroke="var(--nsv-accent)" stroke-width="2"></path>' +
-        circles +
-        labelsHtml +
-        '</svg>'
-    );
-
-}
-
-    /* ============================================================
-       RENDER TABLE
-       ============================================================ */
-
-    function renderTable() {
-
-        var tableContainer =
-            byId(
-                "nsv-table-container"
-            );
-
-
-        if (
-            !filteredItems.length
-        ) {
-
-            tableContainer.innerHTML = `
-
-                <div class="nsv-empty">
-                    No records found.
-                </div>
-
-            `;
-
-            return;
-
-        }
-
-
-        sortItems();
-
-
-        var html = `
-
-            <table class="nsv-table">
-
-                <colgroup>
-
-        `;
-
-
-        columns.forEach(
-            function (column) {
-
-                var width =
-                    columnWidths[
-                        column.field
-                    ] ||
-                    getDefaultColumnWidth(
-                        column.field
-                    );
-
-
-                html += `
-
-                    <col
-                        data-column-field="${escapeHtml(
-                            column.field
-                        )}"
-                        style="width:${width}px;"
-                    >
-
-                `;
-
-            }
-        );
-
-
-        html += `
-
-                </colgroup>
-
-                <thead>
-
-                    <tr>
-
-        `;
-
-
-        columns.forEach(
-            function (column, index) {
-
-                var sortIndicator =
-                    "";
-
-
-                if (
-                    sortState.field ===
-                    column.field
-                ) {
-
-                    sortIndicator =
-                        sortState.direction === "asc"
-                            ? " ▲"
-                            : " ▼";
-
-                }
-
-
-                html += `
-
-                    <th
-                        data-column-index="${index}"
-                        data-column-field="${escapeHtml(
-                            column.field
-                        )}"
-                        class="nsv-sortable-header"
-                        title="Click to sort"
-                    >
-
-                        <div class="nsv-th-content">
-
-                            <span
-                                class="nsv-sort-label"
-                                data-sort-field="${escapeHtml(
-                                    column.field
-                                )}"
-                            >
-                                ${escapeHtml(
-                                    column.header
-                                )}${sortIndicator}
-                            </span>
-
-                            <span
-                                class="nsv-column-resizer"
-                                data-column-index="${index}"
-                                title="Drag to resize column"
-                            ></span>
-
-                        </div>
-
-                    </th>
-
-                `;
-
-            }
-        );
-
-
-        html += `
-
-                    </tr>
-
-                </thead>
-
-                <tbody>
-
-        `;
-
-
-        filteredItems.forEach(
-            function (item) {
-
-                var rowClass =
-                    updateMode
-                        ? "nsv-row-editable"
-                        : "nsv-row-clickable";
-
-
-                html += `
-
-                    <tr
-                        class="${rowClass}"
-                        data-item-id="${escapeHtml(
-                            item.ID
-                        )}"
-                    >
-
-                `;
-
-
-                columns.forEach(
-                    function (column) {
-
-                        html += `
-
-                            <td
-                                data-column-field="${escapeHtml(
-                                    column.field
-                                )}"
-                            >
-                                ${formatValue(
-                                    item[
-                                        column.field
-                                    ],
-                                    column.type
-                                )}
-                            </td>
-
-                        `;
-
-                    }
-                );
-
-
-                html += `
-
-                    </tr>
-
-                `;
-
-            }
-        );
-
-
-        html += `
-
-                </tbody>
-
-            </table>
-
-        `;
-
-
-        tableContainer.innerHTML =
-            html;
-
-
-        attachColumnResizeHandlers();
-
-        attachColumnSortHandlers();
-
-        attachRowClickHandlers();
-
-    };
-
-    function renderDashboard() {
-
-    var tableContainer =
-        byId("nsv-table-container");
-
-
-    if (!tableContainer) {
-        return;
-    }
-
-
-    var data =
-        dashboardPeriod === 1
-            ? getDailyCreatedCounts()
-            : getMonthlyCreatedCounts(dashboardPeriod);
-
-
-    tableContainer.innerHTML = `
-
-        <div class="nsv-dashboard-grid">
-
-            <div class="nsv-dashboard-card nsv-dashboard-card-wide">
-
-                <div class="nsv-dashboard-card-header">
-
-                    <h3 class="nsv-dashboard-card-title">
-                        Clearances added
-                    </h3>
-
-                    <select
-                        id="nsv-dashboard-period"
-                        class="nsv-dashboard-select"
-                    >
-                        <option value="1" ${dashboardPeriod === 1 ? "selected" : ""}>This month</option>
-                        <option value="2" ${dashboardPeriod === 2 ? "selected" : ""}>Last 2 months</option>
-                        <option value="3" ${dashboardPeriod === 3 ? "selected" : ""}>Last 3 months</option>
-                    </select>
-
-                </div>
-
-                <div id="nsv-dashboard-chart" class="nsv-dashboard-chart">
-                    ${buildLineChartSvg(data.labels, data.values)}
-                </div>
-
-            </div>
-
-
-            <div class="nsv-dashboard-card">
-
-                <h3 class="nsv-dashboard-card-title">
-                    Currently being processed
-                </h3>
-
-                <div class="nsv-dashboard-placeholder">
-                    Coming soon
-                </div>
-
-            </div>
-
-
-            <div class="nsv-dashboard-card">
-
-                <h3 class="nsv-dashboard-card-title">
-                    Not renewed in time
-                </h3>
-
-                <div class="nsv-dashboard-placeholder">
-                    Coming soon
-                </div>
-
-            </div>
-
-        </div>
-
-    `;
-
-
-    var periodSelect =
-        byId("nsv-dashboard-period");
-
-
-    if (periodSelect) {
-
-        periodSelect.addEventListener(
-            "change",
-            function () {
-
-                dashboardPeriod =
-                    Number(periodSelect.value);
-
-                renderDashboard();
-
-            }
-        );
-
-    }
-
-}
-
-
-function toggleDashboardMode() {
-
-    dashboardMode = !dashboardMode;
-
-
-    var button =
-        byId("nsv-dashboards");
-
-    var applicationsButton =
-        byId("nsv-applications");
-
-    var searchInput =
-        byId("nsv-search");
-
-
-    if (dashboardMode) {
-
-        /*
-         * Dashboards, Records and Applications are mutually
-         * exclusive views. Turning Dashboards on always
-         * turns Applications off.
-         */
-        if (applicationsMode) {
-
-            applicationsMode = false;
-
-            if (applicationsButton) {
-
-                applicationsButton.classList.remove(
-                    "nsv-update-active"
-                );
-
-                applicationsButton.setAttribute(
-                    "aria-pressed",
-                    "false"
-                );
-
-            }
-
-        }
-
-        button.classList.add("nsv-update-active");
-        button.setAttribute("aria-pressed", "true");
-
-        if (searchInput) {
-            searchInput.disabled = true;
-        }
-
-        renderDashboard();
-
-        setStatus("Viewing dashboards.");
-
-    }
-    else {
-
-        button.classList.remove("nsv-update-active");
-        button.setAttribute("aria-pressed", "false");
-
-        if (searchInput) {
-            searchInput.disabled = false;
-        }
-
-        renderTable();
-
-        setStatus("Viewing table.");
-
-    }
-
-}
-
-
-    /* ============================================================
-       DEFAULT COLUMN WIDTHS
-       ============================================================ */
-
-    function getDefaultColumnWidth(
-        field
-    ) {
-
-        var widths = {
-
-            "field_6": 190,
-
-            "field_2": 150,
-
-            "field_5": 170,
-
-            "field_10": 230,
-
-            "field_14": 120,
-
-            "field_13": 145,
-
-            "field_15": 120,
-
-            "field_16": 120,
-
-            "field_9": 170,
-
-            "field_4": 130
-
-        };
-
-
-        return widths[field] ||
-            150;
-
-    }
-
-
-    /* ============================================================
-       COLUMN RESIZING
-       ============================================================ */
-
-    function attachColumnResizeHandlers() {
-
-        var resizers =
-            document.querySelectorAll(
-                ".nsv-column-resizer"
-            );
-
-
-        resizers.forEach(
-            function (resizer) {
-
-                resizer.addEventListener(
-                    "mousedown",
-                    startColumnResize
-                );
-
-            }
-        );
-
-    }
-
-
-    var resizeState =
-        null;
-
-
-    function startColumnResize(
-        event
-    ) {
-
-        event.preventDefault();
-
-        event.stopPropagation();
-
-
-        var resizer =
-            event.currentTarget;
-
-
-        var columnIndex =
-            Number(
-                resizer.getAttribute(
-                    "data-column-index"
-                )
-            );
-
-
-        var table =
-            document.querySelector(
-                ".nsv-table"
-            );
-
-
-        if (!table) {
-
-            return;
-
-        }
-
-
-        var headerCells =
-            table.querySelectorAll(
-                "thead th"
-            );
-
-
-        var headerCell =
-            headerCells[
-                columnIndex
-            ];
-
-
-        if (!headerCell) {
-
-            return;
-
-        }
-
-
-        resizeState = {
-
-            columnIndex:
-                columnIndex,
-
-            startX:
-                event.clientX,
-
-            startWidth:
-                headerCell.getBoundingClientRect().width
-
-        };
-
-
-        document.body.style.cursor =
-            "col-resize";
-
-        document.body.style.userSelect =
-            "none";
-
-
-        document.addEventListener(
-            "mousemove",
-            handleColumnResize
-        );
-
-        document.addEventListener(
-            "mouseup",
-            stopColumnResize
-        );
-
-    }
-
-
-    function handleColumnResize(
-        event
-    ) {
-
-        if (!resizeState) {
-
-            return;
-
-        }
-
-
-        var delta =
-            event.clientX -
-            resizeState.startX;
-
-
-        var newWidth =
-            resizeState.startWidth +
-            delta;
-
-
-        newWidth =
-            Math.max(
-                90,
-                Math.min(
-                    600,
-                    newWidth
-                )
-            );
-
-
-        var column =
-            columns[
-                resizeState.columnIndex
-            ];
-
-
-        columnWidths[
-            column.field
-        ] =
-            Math.round(
-                newWidth
-            );
-
-
-        var table =
-            document.querySelector(
-                ".nsv-table"
-            );
-
-
-        if (!table) {
-
-            return;
-
-        }
-
-
-        var col =
-            table.querySelector(
-                "col:nth-child(" +
-                (
-                    resizeState.columnIndex +
-                    1
-                ) +
-                ")"
-            );
-
-
-        if (col) {
-
-            col.style.width =
-                newWidth +
-                "px";
-
-        }
-
-
-        var headerCells =
-            table.querySelectorAll(
-                "thead th"
-            );
-
-
-        if (
-            headerCells[
-                resizeState.columnIndex
-            ]
-        ) {
-
-            headerCells[
-                resizeState.columnIndex
-            ].style.width =
-                newWidth +
-                "px";
-
-        }
-
-    }
-
-
-    function stopColumnResize() {
-
-        resizeState =
-            null;
-
-
-        document.body.style.cursor =
-            "";
-
-        document.body.style.userSelect =
-            "";
-
-
-        document.removeEventListener(
-            "mousemove",
-            handleColumnResize
-        );
-
-        document.removeEventListener(
-            "mouseup",
-            stopColumnResize
-        );
-
-    }
-
-
-    /* ============================================================
-       COLUMN SORT HANDLERS
-       ============================================================ */
-
-    function attachColumnSortHandlers() {
-
-        var headers =
-            document.querySelectorAll(
-                ".nsv-sortable-header"
-            );
-
-
-        headers.forEach(
-            function (header) {
-
-                header.addEventListener(
-                    "click",
-                    function (event) {
-
-                        if (
-                            event.target.classList.contains(
-                                "nsv-column-resizer"
-                            )
-                        ) {
-
-                            return;
-
-                        }
-
-
-                        var field =
-                            header.getAttribute(
-                                "data-column-field"
-                            );
-
-
-                        if (field) {
-
-                            handleColumnSort(
-                                field
-                            );
-
-                        }
-
-                    }
-                );
-
-            }
-        );
-
-    }
-
-
-    /* ============================================================
-       ROW CLICK
-       ============================================================ */
-
-    function attachRowClickHandlers() {
-
-        var rows =
-            document.querySelectorAll(
-                ".nsv-table tbody tr"
-            );
-
-
-        rows.forEach(
-            function (row) {
-
-                row.addEventListener(
-                    "click",
-                    function (event) {
-
-                        if (
-                            event.target.classList.contains(
-                                "nsv-column-resizer"
-                            )
-                        ) {
-
-                            return;
-
-                        }
-
-
-                        var itemId =
-                            Number(
-                                row.getAttribute(
-                                    "data-item-id"
-                                )
-                            );
-
-
-                        var item =
-                            allItems.find(
-                                function (record) {
-
-                                    return Number(
-                                        record.ID
-                                    ) ===
-                                    itemId;
-
-                                }
-                            );
-
-
-                        if (!item) {
-
-                            return;
-
-                        }
-
-
-                        selectedItem =
-                            item;
-
-
-                        if (updateMode) {
-
-                            openEditModal(
-                                item
-                            );
-
-                        }
-                        else {
-
-                            openReadOnlyModal(
-                                item
-                            );
-
-                        }
-
-                    }
-                );
-
-            }
-        );
-
-    }
-
-
-    /* ============================================================
-       UPDATE MODE
-       ============================================================ */
-
-    function toggleUpdateMode() {
-
-        exitApplicationsModeIfActive();
-
-        updateMode =
-            !updateMode;
-
-
-        var button =
-            byId(
-                "nsv-update-clearance"
-            );
-
-
-        var hint =
-            byId(
-                "nsv-update-hint"
-            );
-
-
-        if (updateMode) {
-
-            button.classList.add(
-                "nsv-update-active"
-            );
-
-
-            button.setAttribute(
-                "aria-pressed",
-                "true"
-            );
-
-
-            hint.style.display =
-                "block";
-
-
-            setStatus(
-                "Update mode active. Click a row to edit."
-            );
-
-        }
-        else {
-
-            button.classList.remove(
-                "nsv-update-active"
-            );
-
-
-            button.setAttribute(
-                "aria-pressed",
-                "false"
-            );
-
-
-            hint.style.display =
-                "none";
-
-
-            setStatus(
-                "Update mode disabled."
-            );
-
-        }
-
-
-        renderTable();
-
-    }
-
-
-    /* ============================================================
-       MODAL
-       ============================================================ */
-
-async function openModal(
-    mode,
-    item
-) {
-
-        closeModal();
+        var typeAllowed =
+            ALLOWED_ATTACHMENT_TYPES.indexOf(
+                file.type
+            ) !== -1;
+
+
+        var extensionAllowed =
+            ALLOWED_ATTACHMENT_EXTENSIONS.indexOf(
+                extension
+            ) !== -1;
 
 
         /*
-         * IMPORTANT FIX:
-         *
-         * Both "add" and "edit" are form modes.
-         * Previously only "edit" was treated as a form,
-         * which caused "add" to incorrectly open the
-         * read-only modal.
-         */
-
-        var isFormMode =
-            mode === "add" ||
-            mode === "edit";
-
-
-        var isEdit =
-            mode === "edit";
-
-
-        var isAdd =
-            mode === "add";
-
-
-        /*
-         * Add mode has no existing item, so use an empty
-         * object. This prevents item[column.field] from
-         * throwing an exception.
-         */
-
-        var formItem =
-            item || {};
-
-
-        var title =
-            isAdd
-                ? "Add clearance holder"
-                : isEdit
-                    ? "Update clearance"
-                    : "Clearance holder";
-
-
-        var description =
-            isAdd
-                ? "Enter the clearance holder's details and optionally upload a clearance PDF."
-                : isEdit
-                    ? "Update the clearance holder's details and optionally upload a new clearance PDF."
-                    : "View the clearance holder's details.";
-
-
-        var fieldsHtml =
-            "";
-
-
-        TABLE_COLUMNS.forEach(
-            function (column) {
-
-                var value =
-                    isFormMode
-                        ? getFormValue(
-                            formItem[
-                                column.field
-                            ],
-                            column.type
-                        )
-                        : formatModalValue(
-                            formItem[
-                                column.field
-                            ],
-                            column.type
-                        );
-
-
-                fieldsHtml +=
-                    isFormMode
-                        ? buildFormField(
-                            column,
-                            value
-                        )
-                        : buildReadOnlyField(
-                            column,
-                            value
-                        );
-
-            }
-        );
-
-
-        var modal =
-            document.createElement(
-                "div"
-            );
-
-
-        modal.id =
-            "nsv-modal-overlay";
-
-
-        modal.className =
-            "nsv-modal-overlay";
-
-
-        modal.innerHTML = `
-
-            <div
-                class="nsv-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="nsv-modal-title"
-            >
-
-                <div class="nsv-modal-header">
-
-                    <div>
-
-                        <h2
-                            id="nsv-modal-title"
-                            class="nsv-modal-title"
-                        >
-                            ${escapeHtml(
-                                title
-                            )}
-                        </h2>
-
-                        <p class="nsv-modal-description">
-                            ${escapeHtml(
-                                description
-                            )}
-                        </p>
-
-                    </div>
-
-
-                    <button
-                        type="button"
-                        id="nsv-modal-close"
-                        class="nsv-modal-close"
-                        aria-label="Close"
-                    >
-                        ×
-                    </button>
-
-                </div>
-
-
-                ${
-                    isFormMode
-                        ? `
-                            <div
-                                id="nsv-modal-error"
-                                class="nsv-modal-error"
-                                style="display:none;"
-                            ></div>
-                        `
-                        : ""
-                }
-
-
-                ${
-                    isFormMode
-                        ? `
-                            <form
-                                id="nsv-clearance-form"
-                                class="nsv-form"
-                            >
-
-                                <div class="nsv-form-grid">
-
-                                    ${fieldsHtml}
-
-                                    <div class="nsv-form-field nsv-upload-field">
-
-                                        <label
-                                            class="nsv-form-label"
-                                            for="nsv-clearance-file"
-                                        >
-                                            Upload clearance
-                                        </label>
-
-                                        <input
-                                            id="nsv-clearance-file"
-                                            class="nsv-form-input nsv-file-input"
-                                            type="file"
-                                            accept=".pdf,application/pdf"
-                                        >
-
-                                        <div class="nsv-upload-help">
-                                            PDF only. Maximum file size: 25 MB.
-                                        </div>
-
-                                        <div
-                                            id="nsv-selected-file"
-                                            class="nsv-selected-file"
-                                        >
-                                            No new PDF selected.
-                                        </div>
-
-                                        <div class="nsv-upload-existing">
-                                            Selecting a PDF will add it to
-                                            this item's SharePoint attachments.
-                                            Existing attachments will not be removed.
-                                        </div>
-
-                                    </div>
-
-                                </div>
-
-
-                                <div class="nsv-modal-footer">
-
-                                    <button
-                                        type="button"
-                                        id="nsv-modal-cancel"
-                                        class="nsv-modal-button nsv-secondary-button"
-                                    >
-                                        Cancel
-                                    </button>
-
-                                    <button
-                                        type="submit"
-                                        id="nsv-modal-save"
-                                        class="nsv-modal-button nsv-primary-button"
-                                    >
-                                        ${
-                                            isAdd
-                                                ? "Add clearance"
-                                                : "Save changes"
-                                        }
-                                    </button>
-
-                                </div>
-
-                            </form>
-                        `
-                        : `
-                            <div class="nsv-form">
-
-                                <div class="nsv-form-grid">
-
-                                    ${fieldsHtml}
-
-                                </div>
-
-
-                                <div class="nsv-modal-footer">
-
-                                    <button
-                                        type="button"
-                                        id="nsv-modal-delete"
-                                        class="nsv-modal-button nsv-danger-button"
-                                    >
-                                        Delete record
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        id="nsv-modal-cancel"
-                                        class="nsv-modal-button nsv-secondary-button"
-                                    >
-                                        Close
-                                    </button>
-
-                                </div>
-
-                            </div>
-                        `
-                }
-
-            </div>
-
-        `;
-
-
-        document.body.appendChild(
-            modal
-        );
-
-
-document.body.appendChild(
-    modal
-);
-
-
-/*
- * Existing SharePoint attachment.
- *
- * Only show this for existing records.
- * Add mode has no SharePoint item yet.
- */
-if (
-    !isAdd &&
-    item &&
-    item.ID
-) {
-
-    var existingAttachment =
-        await getExistingAttachment(
-            item.ID
-        );
-
-
-    if (existingAttachment) {
-
-        var attachmentField =
-            document.createElement(
-                "div"
-            );
-
-
-        attachmentField.className =
-            "nsv-readonly-field nsv-attachment-field";
-
-
-attachmentField.innerHTML = `
-    <div class="nsv-readonly-label">Attachment</div>
-    <div class="nsv-readonly-value">
-        <button
-            type="button"
-            class="nsv-existing-attachment-link nsv-button"
-            data-attachment-url="${escapeHtml(existingAttachment.url)}"
-        >
-            ${escapeHtml(existingAttachment.fileName)}
-        </button>
-    </div>
-`;
-
-var attachmentLink = attachmentField.querySelector(".nsv-existing-attachment-link");
-
-if (attachmentLink) {
-    attachmentLink.addEventListener("click", function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        var attachmentUrl = attachmentLink.getAttribute("data-attachment-url");
-        if (!attachmentUrl) { return; }
-
-        window.open(attachmentUrl, "_blank", "noopener,noreferrer");
-    });
-}
-
-        var formGrid =
-            modal.querySelector(
-                ".nsv-form-grid"
-            );
-
-
-        if (formGrid) {
-
-            /*
-             * Put the attachment at the bottom of
-             * the existing modal fields, immediately
-             * before the upload control in edit mode.
-             */
-            var uploadField =
-                formGrid.querySelector(
-                    ".nsv-upload-field"
-                );
-
-
-            if (
-                uploadField &&
-                isFormMode
-            ) {
-
-                formGrid.insertBefore(
-                    attachmentField,
-                    uploadField
-                );
-
-            }
-            else {
-
-                /*
-                 * Read-only modal.
-                 */
-                formGrid.appendChild(
-                    attachmentField
-                );
-
-            }
-
-        }
-
-    }
-
-}
-
-
-document.body.classList.add(
-    "nsv-modal-open"
-);
-
-
-        /*
-         * IMPORTANT FIX:
-         *
-         * Attach form events for BOTH add and edit.
-         */
-
-        if (isFormMode) {
-
-            attachModalEvents(
-                mode,
-                item
-            );
-
-
-            var fileInput =
-                byId(
-                    "nsv-clearance-file"
-                );
-
-
-            if (fileInput) {
-
-                fileInput.addEventListener(
-                    "change",
-                    function () {
-
-                        updateSelectedFileDisplay(
-                            fileInput
-                        );
-
-                    }
-                );
-
-            }
-
-
-            var firstInput =
-                modal.querySelector(
-                    ".nsv-form-input"
-                );
-
-
-            if (firstInput) {
-
-                setTimeout(
-                    function () {
-
-                        firstInput.focus();
-
-                    },
-                    50
-                );
-
-            }
-
-        }
-        else {
-
-            attachReadOnlyModalEvents();
-
-        }
-
-    }
-
-
-    function openAddModal() {
-
-        exitApplicationsModeIfActive();
-
-        selectedItem =
-            null;
-
-
-        openModal(
-            "add",
-            null
-        );
-
-    }
-
-
-    function openEditModal(
-        item
-    ) {
-
-        selectedItem =
-            item;
-
-
-        openModal(
-            "edit",
-            item
-        );
-
-    }
-
-
-    function openReadOnlyModal(
-        item
-    ) {
-
-        selectedItem =
-            item;
-
-
-        openModal(
-            "view",
-            item
-        );
-
-    }
-
-
-    function closeModal() {
-
-        var modal =
-            byId(
-                "nsv-modal-overlay"
-            );
-
-
-        if (modal) {
-
-            modal.remove();
-
-        }
-
-
-        document.body.classList.remove(
-            "nsv-modal-open"
-        );
-
-
-        document.removeEventListener(
-            "keydown",
-            modalEscapeHandler
-        );
-
-    }
-
-
-    /* ============================================================
-       READ-ONLY MODAL FIELD
-       ============================================================ */
-
-    function buildReadOnlyField(
-        column,
-        value
-    ) {
-
-        return `
-
-            <div class="nsv-form-field">
-
-                <label
-                    class="nsv-form-label"
-                >
-                    ${escapeHtml(
-                        column.header
-                    )}
-                </label>
-
-                <div
-                    class="nsv-form-input nsv-readonly-value"
-                    aria-readonly="true"
-                >
-                    ${
-                        value ||
-                        "—"
-                    }
-                </div>
-
-            </div>
-
-        `;
-
-    }
-
-
-    function formatModalValue(
-        value,
-        type
-    ) {
+        ------------------------------------------------------------
+        Some browsers/OS combinations report an empty or generic
+        MIME type for certain files, so we accept the file if
+        EITHER the MIME type OR the file extension is allowed.
+        ------------------------------------------------------------
+        */
 
         if (
-            value === null ||
-            value === undefined ||
-            value === ""
+            !typeAllowed &&
+            !extensionAllowed
         ) {
 
-            return "—";
+            return {
 
-        }
+                valid: false,
 
+                message:
+                    "Unsupported file type. Allowed types: JPG, PNG, PDF."
 
-        if (
-            type === "date"
-        ) {
-
-            return escapeHtml(
-                formatDate(
-                    value
-                )
-            );
-
-        }
-
-
-        if (
-            typeof value === "object"
-        ) {
-
-            if (value.Title) {
-
-                return escapeHtml(
-                    value.Title
-                );
-
-            }
-
-
-            if (value.Name) {
-
-                return escapeHtml(
-                    value.Name
-                );
-
-            }
-
-
-            try {
-
-                return escapeHtml(
-                    JSON.stringify(
-                        value
-                    )
-                );
-
-            }
-            catch (e) {
-
-                return "[Object]";
-
-            }
-
-        }
-
-
-        return escapeHtml(
-            String(value)
-        );
-
-    }
-
-
-    function attachReadOnlyModalEvents() {
-
-        var closeButton =
-            byId(
-                "nsv-modal-close"
-            );
-
-
-        var cancelButton =
-            byId(
-                "nsv-modal-cancel"
-            );
-
-
-        var deleteButton =
-            byId(
-                "nsv-modal-delete"
-            );
-
-
-        if (closeButton) {
-
-            closeButton.addEventListener(
-                "click",
-                closeModal
-            );
-
-        }
-
-
-        if (cancelButton) {
-
-            cancelButton.addEventListener(
-                "click",
-                closeModal
-            );
-
-        }
-
-
-        if (deleteButton) {
-
-            deleteButton.addEventListener(
-                "click",
-                function () {
-
-                    if (selectedItem) {
-
-                        openDeleteConfirmation(
-                            selectedItem
-                        );
-
-                    }
-
-                }
-            );
-
-        }
-
-
-        var overlay =
-            byId(
-                "nsv-modal-overlay"
-            );
-
-
-        if (overlay) {
-
-            overlay.addEventListener(
-                "click",
-                function (event) {
-
-                    if (
-                        event.target ===
-                        overlay
-                    ) {
-
-                        closeModal();
-
-                    }
-
-                }
-            );
-
-        }
-
-
-        document.addEventListener(
-            "keydown",
-            modalEscapeHandler
-        );
-
-    }
-
-
-    /* ============================================================
-       DELETE CONFIRMATION
-       ============================================================ */
-
-    function openDeleteConfirmation(item) {
-
-        var existing =
-            byId(
-                "nsv-delete-confirmation"
-            );
-
-
-        if (existing) {
-
-            existing.remove();
-
-        }
-
-
-        var confirmation =
-            document.createElement(
-                "div"
-            );
-
-
-        confirmation.id =
-            "nsv-delete-confirmation";
-
-
-        confirmation.className =
-            "nsv-modal-overlay";
-
-
-        confirmation.style.zIndex =
-            "10001";
-
-
-        confirmation.innerHTML = `
-
-            <div
-                class="nsv-modal nsv-confirmation-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="nsv-delete-confirmation-title"
-            >
-
-                <div class="nsv-modal-header">
-
-                    <div>
-
-                        <h2
-                            id="nsv-delete-confirmation-title"
-                            class="nsv-modal-title"
-                        >
-                            Confirm deletion
-                        </h2>
-
-                        <p class="nsv-modal-description">
-                            Are you sure you wish to permanently delete this record?
-                        </p>
-
-                    </div>
-
-                    <button
-                        type="button"
-                        id="nsv-delete-confirmation-close"
-                        class="nsv-modal-close"
-                        aria-label="Close"
-                    >
-                        ×
-                    </button>
-
-                </div>
-
-                <div class="nsv-modal-footer">
-
-                    <button
-                        type="button"
-                        id="nsv-delete-no"
-                        class="nsv-modal-button nsv-secondary-button"
-                    >
-                        No
-                    </button>
-
-                    <button
-                        type="button"
-                        id="nsv-delete-yes"
-                        class="nsv-modal-button nsv-danger-button"
-                    >
-                        Yes, permanently delete
-                    </button>
-
-                </div>
-
-            </div>
-
-        `;
-
-
-        document.body.appendChild(
-            confirmation
-        );
-
-
-        byId(
-            "nsv-delete-confirmation-close"
-        ).addEventListener(
-            "click",
-            closeDeleteConfirmation
-        );
-
-
-        byId(
-            "nsv-delete-no"
-        ).addEventListener(
-            "click",
-            closeDeleteConfirmation
-        );
-
-
-        byId(
-            "nsv-delete-yes"
-        ).addEventListener(
-            "click",
-            function () {
-
-                permanentlyDeleteItem(
-                    item
-                );
-
-            }
-        );
-
-
-        confirmation.addEventListener(
-            "keydown",
-            function (event) {
-
-                if (event.key === "Escape") {
-
-                    event.preventDefault();
-
-                    event.stopPropagation();
-
-                    closeDeleteConfirmation();
-
-                }
-
-            }
-        );
-
-
-        confirmation.addEventListener(
-            "click",
-            function (event) {
-
-                if (
-                    event.target ===
-                    confirmation
-                ) {
-
-                    closeDeleteConfirmation();
-
-                }
-
-            }
-        );
-
-
-        setTimeout(
-            function () {
-
-                var yesButton =
-                    byId(
-                        "nsv-delete-yes"
-                    );
-
-
-                if (yesButton) {
-
-                    yesButton.focus();
-
-                }
-
-            },
-            50
-        );
-
-    }
-
-
-    function closeDeleteConfirmation() {
-
-        var confirmation =
-            byId(
-                "nsv-delete-confirmation"
-            );
-
-
-        if (confirmation) {
-
-            confirmation.remove();
-
-        }
-
-    }
-
-
-    async function permanentlyDeleteItem(
-        item
-    ) {
-
-        if (
-            !item ||
-            !item.ID
-        ) {
-
-            closeDeleteConfirmation();
-
-            return;
-
-        }
-
-
-        var yesButton =
-            byId(
-                "nsv-delete-yes"
-            );
-
-
-        var noButton =
-            byId(
-                "nsv-delete-no"
-            );
-
-
-        if (yesButton) {
-
-            yesButton.disabled =
-                true;
-
-            yesButton.textContent =
-                "Deleting...";
-
-        }
-
-
-        if (noButton) {
-
-            noButton.disabled =
-                true;
-
-        }
-
-
-        try {
-
-            setStatus(
-                "Permanently deleting clearance record..."
-            );
-
-
-            var itemUrl =
-                SITE_URL +
-                "/_api/web/lists/GetByTitle('" +
-                encodeURIComponent(
-                    LIST_TITLE
-                ) +
-                "')/items(" +
-                item.ID +
-                ")";
-
-
-            var digest =
-                await getRequestDigest();
-
-
-            await apiDelete(
-                itemUrl,
-                {
-                    "X-RequestDigest":
-                        digest
-                }
-            );
-
-
-            closeDeleteConfirmation();
-
-            closeModal();
-
-            selectedItem =
-                null;
-
-
-            setStatus(
-                "Clearance record deleted successfully."
-            );
-
-
-            await initialise();
-
-        }
-        catch (error) {
-
-            console.error(
-                "Delete clearance error:",
-                error
-            );
-
-
-            if (yesButton) {
-
-                yesButton.disabled =
-                    false;
-
-                yesButton.textContent =
-                    "Yes, permanently delete";
-
-            }
-
-
-            if (noButton) {
-
-                noButton.disabled =
-                    false;
-
-            }
-
-
-            var message =
-                error &&
-                error.message
-                    ? error.message
-                    : "Unable to delete the record.";
-
-
-            setStatus(
-                "ERROR: " +
-                message
-            );
-
-
-            alert(
-                "The record could not be deleted.\n\n" +
-                message
-            );
-
-        }
-
-    }
-
-
-    /* ============================================================
-       FORM FIELD GENERATION
-       ============================================================ */
-
-    function buildFormField(
-        column,
-        value
-    ) {
-
-        var inputType =
-            column.type === "date"
-                ? "date"
-                : "text";
-
-
-        return `
-
-            <div class="nsv-form-field">
-
-                <label
-                    class="nsv-form-label"
-                    for="nsv-field-${escapeHtml(
-                        column.field
-                    )}"
-                >
-                    ${escapeHtml(
-                        column.header
-                    )}
-                </label>
-
-
-                <input
-                    id="nsv-field-${escapeHtml(
-                        column.field
-                    )}"
-                    class="nsv-form-input"
-                    data-field="${escapeHtml(
-                        column.field
-                    )}"
-                    type="${inputType}"
-                    value="${escapeHtml(
-                        value
-                    )}"
-                    ${
-                        column.field === "field_10"
-                            ? 'autocomplete="email"'
-                            : ""
-                    }
-                >
-
-            </div>
-
-        `;
-
-    }
-
-
-    function getFormValue(
-        value,
-        type
-    ) {
-
-        if (
-            value === null ||
-            value === undefined ||
-            value === ""
-        ) {
-
-            return "";
-
-        }
-
-
-        if (
-            type === "date"
-        ) {
-
-            var date =
-                new Date(value);
-
-
-            if (
-                !isNaN(
-                    date.getTime()
-                )
-            ) {
-
-                var year =
-                    date.getFullYear();
-
-
-                var month =
-                    String(
-                        date.getMonth() + 1
-                    )
-                        .padStart(
-                            2,
-                            "0"
-                        );
-
-
-                var day =
-                    String(
-                        date.getDate()
-                    )
-                        .padStart(
-                            2,
-                            "0"
-                        );
-
-
-                return (
-                    year +
-                    "-" +
-                    month +
-                    "-" +
-                    day
-                );
-
-            }
-
-        }
-
-
-        return String(value);
-
-    }
-
-
-    /* ============================================================
-       MODAL EVENTS
-       ============================================================ */
-
-    function attachModalEvents(
-        mode,
-        item
-    ) {
-
-        var closeButton =
-            byId(
-                "nsv-modal-close"
-            );
-
-
-        var cancelButton =
-            byId(
-                "nsv-modal-cancel"
-            );
-
-
-        var form =
-            byId(
-                "nsv-clearance-form"
-            );
-
-
-        if (closeButton) {
-
-            closeButton.addEventListener(
-                "click",
-                closeModal
-            );
-
-        }
-
-
-        if (cancelButton) {
-
-            cancelButton.addEventListener(
-                "click",
-                closeModal
-            );
-
-        }
-
-
-        if (form) {
-
-            form.addEventListener(
-                "submit",
-                function (event) {
-
-                    event.preventDefault();
-
-
-                    if (
-                        mode === "edit"
-                    ) {
-
-                        updateClearance(
-                            item
-                        );
-
-                    }
-                    else if (
-                        mode === "add"
-                    ) {
-
-                        addClearance();
-
-                    }
-
-                }
-            );
-
-        }
-
-
-        var overlay =
-            byId(
-                "nsv-modal-overlay"
-            );
-
-
-        if (overlay) {
-
-            overlay.addEventListener(
-                "click",
-                function (event) {
-
-                    if (
-                        event.target ===
-                        overlay
-                    ) {
-
-                        closeModal();
-
-                    }
-
-                }
-            );
-
-        }
-
-
-        document.addEventListener(
-            "keydown",
-            modalEscapeHandler
-        );
-
-    }
-
-
-    function modalEscapeHandler(
-        event
-    ) {
-
-        if (
-            event.key === "Escape"
-        ) {
-
-            closeModal();
-
-        }
-
-    }
-
-
-    /* ============================================================
-       FILE DISPLAY
-       ============================================================ */
-
-    function updateSelectedFileDisplay(
-        input
-    ) {
-
-        var display =
-            byId(
-                "nsv-selected-file"
-            );
-
-
-        if (!display) {
-
-            return;
-
-        }
-
-
-        if (
-            !input.files ||
-            !input.files.length
-        ) {
-
-            display.textContent =
-                "No new PDF selected.";
-
-
-            display.classList.remove(
-                "nsv-file-selected"
-            );
-
-
-            display.classList.remove(
-                "nsv-file-invalid"
-            );
-
-
-            return;
-
-        }
-
-
-        var file =
-            input.files[0];
-
-
-        var extension =
-            file.name
-                .split(".")
-                .pop()
-                .toLowerCase();
-
-
-        if (
-            extension !== "pdf"
-        ) {
-
-            display.textContent =
-                "Invalid file. Please select a PDF.";
-
-
-            display.classList.remove(
-                "nsv-file-selected"
-            );
-
-
-            display.classList.add(
-                "nsv-file-invalid"
-            );
-
-
-            return;
-
-        }
-
-
-        if (
-            file.size >
-            MAX_ATTACHMENT_SIZE
-        ) {
-
-            display.textContent =
-                "File is too large. Maximum size is 25 MB.";
-
-
-            display.classList.remove(
-                "nsv-file-selected"
-            );
-
-
-            display.classList.add(
-                "nsv-file-invalid"
-            );
-
-
-            return;
-
-        }
-
-
-        display.classList.remove(
-            "nsv-file-invalid"
-        );
-
-
-        display.classList.add(
-            "nsv-file-selected"
-        );
-
-
-        display.textContent =
-            file.name +
-            " (" +
-            formatFileSize(
-                file.size
-            ) +
-            ")";
-
-    }
-
-
-    function formatFileSize(
-        bytes
-    ) {
-
-        if (
-            bytes <
-            1024
-        ) {
-
-            return bytes +
-                " B";
-
-        }
-
-
-        if (
-            bytes <
-            1024 * 1024
-        ) {
-
-            return (
-                bytes /
-                1024
-            ).toFixed(1) +
-            " KB";
-
-        }
-
-
-        return (
-            bytes /
-            (
-                1024 *
-                1024
-            )
-        ).toFixed(1) +
-        " MB";
-
-    }
-
-
-    /* ============================================================
-       FORM DATA
-       ============================================================ */
-
-    function collectFormData() {
-
-        var data = {};
-
-
-        TABLE_COLUMNS.forEach(
-            function (column) {
-
-                var input =
-                    document.querySelector(
-                        '[data-field="' +
-                        column.field +
-                        '"]'
-                    );
-
-
-                if (!input) {
-
-                    return;
-
-                }
-
-
-                var value =
-                    input.value;
-
-
-                if (
-                    column.type === "date"
-                ) {
-
-                    if (value) {
-
-                        value =
-                            value +
-                            "T00:00:00Z";
-
-                    }
-                    else {
-
-                        value =
-                            null;
-
-                    }
-
-                }
-
-
-                data[
-                    column.field
-                ] =
-                    value;
-
-            }
-        );
-
-
-        return data;
-
-    }
-
-
-    function getSelectedPdf() {
-
-        var input =
-            byId(
-                "nsv-clearance-file"
-            );
-
-
-        if (
-            !input ||
-            !input.files ||
-            !input.files.length
-        ) {
-
-            return null;
-
-        }
-
-
-        return input.files[0];
-
-    }
-
-
-    /* ============================================================
-       VALIDATION
-       ============================================================ */
-
-    function validateForm(
-        data,
-        file
-    ) {
-
-        if (
-            !String(
-                data.field_6 || ""
-            ).trim()
-        ) {
-
-            return (
-                "Please enter the Full Name."
-            );
-
-        }
-
-
-        if (
-            data.field_10 &&
-            !isValidEmail(
-                data.field_10
-            )
-        ) {
-
-            return (
-                "Please enter a valid Email Address."
-            );
-
-        }
-
-
-        if (file) {
-
-            var extension =
-                String(
-                    file.name || ""
-                )
-                    .split(".")
-                    .pop()
-                    .toLowerCase();
-
-
-            if (
-                extension !== "pdf"
-            ) {
-
-                return (
-                    "The clearance document must be a PDF."
-                );
-
-            }
-
-
-            if (
-                file.size >
-                MAX_ATTACHMENT_SIZE
-            ) {
-
-                return (
-                    "The PDF is too large. The maximum permitted size is 25 MB."
-                );
-
-            }
-
-        }
-
-
-        return null;
-
-    }
-
-
-    function isValidEmail(
-        email
-    ) {
-
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-            .test(
-                String(email).trim()
-            );
-
-    }
-
-
-    /* ============================================================
-       ADD CLEARANCE
-       ============================================================ */
-
-    async function addClearance() {
-
-        var saveButton =
-            byId(
-                "nsv-modal-save"
-            );
-
-
-        var data =
-            collectFormData();
-
-
-        var file =
-            getSelectedPdf();
-
-
-        var validationError =
-            validateForm(
-                data,
-                file
-            );
-
-
-        if (
-            validationError
-        ) {
-
-            showModalError(
-                validationError
-            );
-
-            return;
-
-        }
-
-
-        if (!saveButton) {
-
-            console.error(
-                "Add clearance: save button was not found."
-            );
-
-            return;
-
-        }
-
-
-        try {
-
-            saveButton.disabled =
-                true;
-
-
-            saveButton.classList.add(
-                "nsv-button-loading"
-            );
-
-
-            saveButton.textContent =
-                "Adding...";
-
-
-            setStatus(
-                "Creating new clearance holder..."
-            );
-
-
-            var itemUrl =
-
-                SITE_URL +
-
-                "/_api/web/lists/GetByTitle('" +
-
-                encodeURIComponent(
-                    LIST_TITLE
-                ) +
-
-                "')/items";
-
-
-            var digest =
-                await getRequestDigest();
-
-
-            var createdItem =
-                await apiPost(
-                    itemUrl,
-                    JSON.stringify(
-                        data
-                    ),
-                    {
-                        "Content-Type":
-                            "application/json;odata=nometadata",
-
-                        "X-RequestDigest":
-                            digest
-                    }
-                );
-
-
-            var newItemId =
-                null;
-
-
-            if (
-                createdItem &&
-                createdItem.ID
-            ) {
-
-                newItemId =
-                    createdItem.ID;
-
-            }
-            else if (
-                createdItem &&
-                createdItem.Id
-            ) {
-
-                newItemId =
-                    createdItem.Id;
-
-            }
-            else if (
-                createdItem &&
-                createdItem.d &&
-                createdItem.d.Id
-            ) {
-
-                newItemId =
-                    createdItem.d.Id;
-
-            }
-            else if (
-                createdItem &&
-                createdItem.d &&
-                createdItem.d.ID
-            ) {
-
-                newItemId =
-                    createdItem.d.ID;
-
-            }
-
-
-            if (!newItemId) {
-
-                var lookupUrl =
-
-                    SITE_URL +
-
-                    "/_api/web/lists/GetByTitle('" +
-
-                    encodeURIComponent(
-                        LIST_TITLE
-                    ) +
-
-                    "')/items?$select=Id,ID,field_6,Created&$orderby=Created%20desc&$top=10";
-
-
-                var lookupResult =
-                    await apiGet(
-                        lookupUrl
-                    );
-
-
-                var matchingItem =
-                    (
-                        lookupResult.value ||
-                        []
-                    ).find(
-                        function (record) {
-
-                            return (
-                                String(
-                                    record.field_6 ||
-                                    ""
-                                ).trim()
-                                ===
-                                String(
-                                    data.field_6 ||
-                                    ""
-                                ).trim()
-                            );
-
-                        }
-                    );
-
-
-                if (
-                    matchingItem
-                ) {
-
-                    newItemId =
-                        matchingItem.ID ||
-                        matchingItem.Id;
-
-                }
-
-            }
-
-
-            if (!newItemId) {
-
-                throw new Error(
-                    "The clearance holder was created, but SharePoint did not return the new item's ID. The PDF could not be attached."
-                );
-
-            }
-
-
-            if (file) {
-
-                saveButton.textContent =
-                    "Uploading PDF...";
-
-
-                await uploadPdfAttachment(
-                    newItemId,
-                    file
-                );
-
-            }
-
-
-            setStatus(
-                file
-                    ? "Clearance holder and PDF added successfully."
-                    : "Clearance holder added successfully."
-            );
-
-
-            closeModal();
-
-
-            await initialise();
-
-        }
-        catch (error) {
-
-            console.error(
-                "Add clearance error:",
-                error
-            );
-
-
-            showModalError(
-                error && error.message
-                    ? error.message
-                    : "Unable to add the clearance holder."
-            );
-
-
-            saveButton.disabled =
-                false;
-
-
-            saveButton.classList.remove(
-                "nsv-button-loading"
-            );
-
-
-            saveButton.textContent =
-                "Add clearance";
-
-        }
-
-    }
-
-
-    /* ============================================================
-       UPDATE CLEARANCE
-       ============================================================ */
-
-    async function updateClearance(
-        item
-    ) {
-
-        var saveButton =
-            byId(
-                "nsv-modal-save"
-            );
-
-
-        var data =
-            collectFormData();
-
-
-        var file =
-            getSelectedPdf();
-
-
-        var validationError =
-            validateForm(
-                data,
-                file
-            );
-
-
-        if (
-            validationError
-        ) {
-
-            showModalError(
-                validationError
-            );
-
-            return;
-
-        }
-
-
-        if (
-            !item ||
-            !item.ID
-        ) {
-
-            showModalError(
-                "The selected SharePoint item could not be identified."
-            );
-
-            return;
-
-        }
-
-
-        if (!saveButton) {
-
-            showModalError(
-                "The save button could not be found."
-            );
-
-            return;
-
-        }
-
-
-        try {
-
-            saveButton.disabled =
-                true;
-
-
-            saveButton.classList.add(
-                "nsv-button-loading"
-            );
-
-
-            saveButton.textContent =
-                "Saving...";
-
-
-            setStatus(
-                "Updating clearance holder..."
-            );
-
-
-            var itemUrl =
-
-                SITE_URL +
-
-                "/_api/web/lists/GetByTitle('" +
-
-                encodeURIComponent(
-                    LIST_TITLE
-                ) +
-
-                "')/items(" +
-
-                item.ID +
-
-                ")";
-
-
-            var digest =
-                await getRequestDigest();
-
-
-            await apiMerge(
-                itemUrl,
-                data,
-                {
-                    "X-RequestDigest":
-                        digest
-                }
-            );
-
-
-            if (file) {
-
-                saveButton.textContent =
-                    "Uploading PDF...";
-
-
-                await uploadPdfAttachment(
-                    item.ID,
-                    file
-                );
-
-            }
-
-
-            setStatus(
-                file
-                    ? "Clearance updated and PDF uploaded successfully."
-                    : "Clearance updated successfully."
-            );
-
-
-            closeModal();
-
-
-            await initialise();
-
-        }
-        catch (error) {
-
-            console.error(
-                "Update clearance error:",
-                error
-            );
-
-
-            showModalError(
-                error && error.message
-                    ? error.message
-                    : "Unable to update the clearance."
-            );
-
-
-            saveButton.disabled =
-                false;
-
-
-            saveButton.classList.remove(
-                "nsv-button-loading"
-            );
-
-
-            saveButton.textContent =
-                "Save changes";
-
-        }
-
-    }
-
-
-    /* ============================================================
-       MODAL ERROR
-       ============================================================ */
-
-    function showModalError(
-        message
-    ) {
-
-        var element =
-            byId(
-                "nsv-modal-error"
-            );
-
-
-        if (!element) {
-
-            return;
-
-        }
-
-
-        element.textContent =
-            message;
-
-
-        element.style.display =
-            "block";
-
-
-        element.scrollIntoView({
-            behavior: "smooth",
-            block: "nearest"
-        });
-
-    }
-
-/* ============================================================
-   EXISTING SHAREPOINT ATTACHMENT
-   ============================================================ */
-
-async function getExistingAttachment(itemId) {
-
-    if (!itemId) {
-
-        return null;
-
-    }
-
-
-    var url =
-
-        SITE_URL +
-
-        "/_api/web/lists/GetByTitle('" +
-
-        encodeURIComponent(
-            LIST_TITLE
-        ) +
-
-        "')/items(" +
-
-        itemId +
-
-        ")/AttachmentFiles?$select=FileName,ServerRelativeUrl";
-
-
-    try {
-
-        var result =
-            await apiGet(
-                url
-            );
-
-
-        var attachments =
-            result.value ||
-            (
-                result.d &&
-                result.d.results
-                    ? result.d.results
-                    : []
-            );
-
-
-        if (
-            !attachments ||
-            !attachments.length
-        ) {
-
-            return null;
-
-        }
-
-
-        var attachment =
-            attachments[0];
-
-
-        if (
-            !attachment.FileName ||
-            !attachment.ServerRelativeUrl
-        ) {
-
-            return null;
+            };
 
         }
 
 
         return {
 
-            fileName:
-                attachment.FileName,
+            valid: true,
 
-            url:
-                attachment.ServerRelativeUrl.indexOf(
-                    "http://"
-                ) === 0 ||
-                attachment.ServerRelativeUrl.indexOf(
-                    "https://"
-                ) === 0
-
-                    ? attachment.ServerRelativeUrl
-
-                    : window.location.origin +
-                      attachment.ServerRelativeUrl
+            message: ""
 
         };
 
     }
-    catch (error) {
-
-        console.error(
-            "Unable to load existing SharePoint attachment:",
-            error
-        );
 
 
-        return null;
+    function showAttachmentError(message) {
+
+        var errorContainer =
+            document.getElementById(
+                "passAttachmentError"
+            );
+
+
+        if (!errorContainer) {
+
+            return;
+
+        }
+
+
+        errorContainer.textContent =
+            message ||
+            "";
+
+
+        errorContainer.style.display =
+            message
+                ? "block"
+                : "none";
 
     }
 
-}
 
-    /* ============================================================
-       VALUE FORMATTING
-       ============================================================ */
+    /*
+    ============================================================
+    SHAREPOINT LIST CONFIGURATION
+    ============================================================
+    */
 
-    function formatValue(
-        value,
-        type
-    ) {
+
+    var SITE_URL =
+        "https://mcga.sharepoint.com/sites/InformationAssurance";
+
+
+    var LIST_NAME =
+        "Building_Pass_Request_Public";
+
+
+    var LIST_API_URL =
+        SITE_URL +
+        "/_api/web/lists/getbytitle('" +
+        LIST_NAME +
+        "')/items";
+
+
+    var LIST_ITEM_TYPE =
+        "SP.Data.Building_x005f_Pass_x005f_RequestListItem";
+
+
+    /*
+    ============================================================
+    ADMIN USERS
+    ============================================================
+
+    Only these SharePoint accounts will see/access the
+    Admin Dashboard.
+
+    ============================================================
+    */
+
+    var ADMIN_USERS = [
+
+        "joshua.davis@mcga.gov.uk",
+
+        "chris.townsend@mcga.gov.uk",
+
+        "hqsecuritymanager@mcga.gov.uk", 
+
+        "frontdesksecurity@mcga.gov.uk"
+
+    ];
+
+
+    /*
+    ============================================================
+    SITE ACCESS PERMISSIONS
+    ============================================================
+
+    EDIT THIS SECTION TO DEFINE THE ACCESS PERMISSIONS
+    AVAILABLE FOR EACH SITE.
+
+    The user can select MULTIPLE permissions.
+
+    The selected permissions will be saved to SharePoint
+    in the existing comma-separated Access field.
+
+    ============================================================
+    */
+
+    var SITE_ACCESS_OPTIONS = {
+
+        "Aberdeen": [
+            "Main Office",
+            "Data Centre",
+        ],
+
+        "Belfast": [
+            "Main Office",
+            "IT Secure Room",
+ 
+        ],
+
+        "Beverley": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "Cardiff": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "Colchester": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "Daedalus": [
+            "Electric Pass"
+        ],
+
+        "Dover": [
+            "Main Entrance",
+            "Office Area",
+            "Restricted Area"
+        ],
+
+        "Falmouth": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "Glasgow": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "Holyhead": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "Humber": [
+            "N/A - No Electronic Pass"
+        ],
+
+        "JRCC": [
+            "Group 4 (Visitor/Contractor) - General Access",
+            "Group 5 (ICT) - General Access, IT Area, Training Area, Operations Room, Planning Room",
+            "Group 6 (ICT+) - General Access, IT Area, Training Area, Operations Room, Planning Room & Data Hall",
+            "Group 7 (Operations) - General Access, Training Area & Operations Room",
+            "Group 8 (Operations+) - General Access, Training Area, Operations Room & Planning Room",
+            "Group 9 (Trainee) - General Access & Training Area",
+            "Group 10 (FM Contractor) - General, IT Area, Training Area, Operations Room, FM Areas & Planning Room",
+            "Group 11 (FM Contractor +) - General, IT Area, Training Area, Operations Room, FM Area, Planning Room & Data Hall"
+        ],
+
+        "Liverpool": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "London": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Milford Haven": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Plymouth": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Shetland": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Spring Place": [
+            "MCA General Access",
+            "MCA Marine Office",
+            "MCA IT Build Room",
+            "MCA Disaster Recovery Suite",
+            "MCA Data Centre",
+            "MCA RCIT Interview Room"
+        ],
+
+        "Stornoway": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Swansea": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Torbay": [
+            "N/A = No Electronic Pass",
+        ],
+
+        "Tyneside": [
+            "N/A = No Electronic Pass",
+        ]
+
+    };
+
+
+    /*
+    ============================================================
+    APPLICATION VIEW
+    ============================================================
+    */
+
+    var currentView = "home";
+
+
+    /*
+    ============================================================
+    DASHBOARD CONTAINER
+    ============================================================
+    */
+
+    var dashboard =
+        document.getElementById("passDashboard");
+
+
+    if (!dashboard) {
+
+        console.error(
+            "Pass Dashboard: #passDashboard not found."
+        );
+
+        return;
+
+    }
+
+
+    /*
+    ============================================================
+    DATA
+    ============================================================
+    */
+
+    var allData = [];
+
+    var data = [];
+
+    var currentSearch = "";
+
+    var currentSite = "ALL";
+
+    var currentStatus = "ALL";
+
+
+    /*
+    ============================================================
+    CURRENT LOGGED-IN USER
+    ============================================================
+    */
+
+    var currentUserEmail = "";
+
+    var currentUserDisplayName = "";
+
+    var isAdmin = false;
+
+
+    /*
+    ============================================================
+    AVAILABLE SITES
+    ============================================================
+    */
+
+    var availableSites = [];
+
+
+    /*
+    ============================================================
+    INITIAL LOADING MESSAGE
+    ============================================================
+    */
+
+    dashboard.innerHTML = `
+
+        <div style="
+            padding:30px;
+            background:#f3f2f1;
+            border-radius:10px;
+            font-family:'Segoe UI',Arial,sans-serif;
+            color:#323130;
+            text-align:center;
+        ">
+
+            <div style="
+                font-size:20px;
+                font-weight:600;
+                margin-bottom:8px;
+            ">
+                Loading Building Pass Request Dashboard...
+            </div>
+
+            <div style="
+                font-size:13px;
+                color:#605e5c;
+            ">
+                Retrieving the latest pass data.
+            </div>
+
+        </div>
+
+    `;
+
+
+    /*
+    ============================================================
+    HELPERS
+    ============================================================
+    */
+
+    function escapeHtml(value) {
 
         if (
             value === null ||
-            value === undefined ||
-            value === ""
+            value === undefined
         ) {
 
-            return "—";
+            return "";
 
         }
 
 
-        if (
-            type === "date"
-        ) {
+        return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
 
-            return escapeHtml(
-                formatDate(
-                    value
-                )
+    }
+
+
+    function normalise(value) {
+
+        return String(
+            value || ""
+        )
+        .trim()
+        .toLowerCase();
+
+    }
+
+
+    function isAdminUser() {
+
+        var email =
+            normalise(
+                currentUserEmail
             );
 
-        }
 
+        return ADMIN_USERS.some(
+            function (adminEmail) {
 
-        if (
-            typeof value === "object"
-        ) {
-
-            if (
-                value.Title
-            ) {
-
-                return escapeHtml(
-                    value.Title
-                );
+                return normalise(
+                    adminEmail
+                ) === email;
 
             }
-
-
-            if (
-                value.Name
-            ) {
-
-                return escapeHtml(
-                    value.Name
-                );
-
-            }
-
-
-            try {
-
-                return escapeHtml(
-                    JSON.stringify(
-                        value
-                    )
-                );
-
-            }
-            catch (e) {
-
-                return "[Object]";
-
-            }
-
-        }
-
-
-        return escapeHtml(
-            String(value)
         );
 
     }
 
 
-    /* ============================================================
-       DATE FORMATTING
-       ============================================================ */
-
-    function formatDate(
-        value
-    ) {
+    function formatDate(value) {
 
         if (!value) {
 
@@ -6050,7 +589,7 @@ async function getExistingAttachment(itemId) {
             )
         ) {
 
-            return "—";
+            return escapeHtml(value);
 
         }
 
@@ -6058,857 +597,5155 @@ async function getExistingAttachment(itemId) {
         return date.toLocaleDateString(
             "en-GB",
             {
-                day:
-                    "2-digit",
-
-                month:
-                    "short",
-
-                year:
-                    "numeric"
+                day: "2-digit",
+                month: "short",
+                year: "numeric"
             }
         );
 
     }
 
 
-    /* ============================================================
-       HTML ESCAPING
-       ============================================================ */
+    function formatDateTime(value) {
 
-    function escapeHtml(
-        value
+        if (!value) {
+
+            return "—";
+
+        }
+
+
+        var date =
+            new Date(value);
+
+
+        if (
+            isNaN(
+                date.getTime()
+            )
+        ) {
+
+            return escapeHtml(value);
+
+        }
+
+
+        return (
+            date.toLocaleDateString(
+                "en-GB",
+                {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric"
+                }
+            )
+            +
+            " "
+            +
+            date.toLocaleTimeString(
+                "en-GB",
+                {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                }
+            )
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    GET ACCESS OPTIONS FOR SITE
+    ============================================================
+    */
+
+    function getAccessOptionsForSite(site) {
+
+        if (
+            !site ||
+            !SITE_ACCESS_OPTIONS[site]
+        ) {
+
+            return [];
+
+        }
+
+
+        return SITE_ACCESS_OPTIONS[site];
+
+    }
+
+
+    /*
+    ============================================================
+    GET SELECTED ACCESS PERMISSIONS
+    ============================================================
+    */
+
+    function getSelectedAccessPermissions() {
+
+        var accessSelect =
+            document.getElementById(
+                "formAccess"
+            );
+
+
+        if (!accessSelect) {
+
+            return [];
+
+        }
+
+
+        return Array.from(
+            accessSelect.selectedOptions
+        )
+        .map(
+            function (option) {
+
+                return option.value;
+
+            }
+        )
+        .filter(
+            function (value) {
+
+                return value !== "";
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    UPDATE ACCESS PERMISSIONS DROPDOWN
+    ============================================================
+    */
+
+    function updateAccessPermissionsDropdown(
+        clearSelection
     ) {
 
-        return String(value)
-
-            .replace(
-                /&/g,
-                "&amp;"
-            )
-
-            .replace(
-                /</g,
-                "&lt;"
-            )
-
-            .replace(
-                />/g,
-                "&gt;"
-            )
-
-            .replace(
-                /"/g,
-                "&quot;"
-            )
-
-            .replace(
-                /'/g,
-                "&#039;"
+        var siteSelect =
+            document.getElementById(
+                "formSite"
             );
+
+
+        var accessSelect =
+            document.getElementById(
+                "formAccess"
+            );
+
+
+        var accessHelp =
+            document.getElementById(
+                "passAccessStatus"
+            );
+
+
+        if (
+            !siteSelect ||
+            !accessSelect
+        ) {
+
+            return;
+
+        }
+
+
+        var selectedSite =
+            siteSelect.value;
+
+
+        var options =
+            getAccessOptionsForSite(
+                selectedSite
+            );
+
+
+        if (clearSelection !== false) {
+
+            accessSelect.innerHTML = "";
+
+        }
+
+
+        if (!selectedSite) {
+
+            accessSelect.disabled =
+                true;
+
+
+            accessSelect.innerHTML = `
+
+                <option value="">
+                    Select a site first
+                </option>
+
+            `;
+
+
+            if (accessHelp) {
+
+                accessHelp.className =
+                    "pass-site-loading";
+
+                accessHelp.textContent =
+                    "Select a site to see available access areas.";
+
+            }
+
+
+            return;
+
+        }
+
+
+        accessSelect.disabled =
+            false;
+
+
+        accessSelect.innerHTML = `
+
+            <option value="">
+                Select access areas...
+            </option>
+
+        `;
+
+
+        options.forEach(
+            function (optionValue) {
+
+                var option =
+                    document.createElement(
+                        "option"
+                    );
+
+
+                option.value =
+                    optionValue;
+
+
+                option.textContent =
+                    optionValue;
+
+
+                accessSelect.appendChild(
+                    option
+                );
+
+            }
+        );
+
+
+        if (options.length === 0) {
+
+            accessSelect.disabled =
+                true;
+
+
+            accessSelect.innerHTML = `
+
+                <option value="">
+                    No access areas configured
+                </option>
+
+            `;
+
+
+            if (accessHelp) {
+
+                accessHelp.className =
+                    "pass-site-error";
+
+                accessHelp.textContent =
+                    "No access permissions have been configured for this site.";
+
+            }
+
+            return;
+
+        }
+
+
+        if (accessHelp) {
+
+            accessHelp.className =
+                "pass-site-loading";
+
+            accessHelp.textContent =
+                "Hold Ctrl (Windows) or Command (Mac) to select multiple areas.";
+
+        }
 
     }
 
 
-    /* ============================================================
-       EVENTS
-       ============================================================ */
+    /*
+    ============================================================
+    GET CURRENT SHAREPOINT USER
+    ============================================================
+    */
 
-byId("nsv-dashboards").addEventListener(
-    "click",
-    function () {
-        toggleDashboardMode();
-    }
-);
+    function getCurrentUser() {
 
-byId("nsv-applications").addEventListener(
-    "click",
-    function () {
-        toggleApplicationsMode();
-    }
-);
+        return fetch(
+            SITE_URL +
+            "/_api/web/currentuser",
+            {
+                method: "GET",
 
-    byId(
-        "nsv-search"
-    ).addEventListener(
-        "input",
-        function (event) {
+                credentials: "same-origin",
 
-            search(
-                event.target.value
-            );
+                headers: {
+                    "Accept":
+                        "application/json;odata=verbose"
+                }
+            }
+        )
+        .then(
+            function (response) {
 
-        }
-    );
+                if (!response.ok) {
 
+                    throw new Error(
+                        "Unable to determine the current SharePoint user. HTTP " +
+                        response.status
+                    );
 
-    byId(
-        "nsv-refresh"
-    ).addEventListener(
-        "click",
-        function () {
-
-            initialise();
-
-        }
-    );
+                }
 
 
-    byId(
-        "nsv-add-clearance"
-    ).addEventListener(
-        "click",
-        function () {
-
-            openAddModal();
-
-        }
-    );
-
-
-    byId(
-        "nsv-update-clearance"
-    ).addEventListener(
-        "click",
-        function () {
-
-            toggleUpdateMode();
-
-        }
-    );
-
-
-    byId(
-        "nsv-expired-clearance"
-    ).addEventListener(
-        "click",
-        function () {
-
-            toggleExpiredFilter();
-
-        }
-    );
-
-
-    byId(
-        "nsv-expired-clearance"
-    ).addEventListener(
-        "keydown",
-        function (event) {
-
-            if (
-                event.key === "Enter" ||
-                event.key === " "
-            ) {
-
-                event.preventDefault();
-
-                toggleExpiredFilter();
+                return response.json();
 
             }
+        )
+        .then(
+            function (json) {
 
-        }
-    );
-
-
-    byId(
-        "nsv-renewal-filter"
-    ).addEventListener(
-        "click",
-        function () {
-
-            toggleRenewalFilter();
-
-        }
-    );
+                var user =
+                    json.d;
 
 
-    byId(
-        "nsv-renewal-filter"
-    ).addEventListener(
-        "keydown",
-        function (event) {
-
-            if (
-                event.key === "Enter" ||
-                event.key === " "
-            ) {
-
-                event.preventDefault();
-
-                toggleRenewalFilter();
-
-            }
-
-        }
-    );
+                currentUserEmail =
+                    String(
+                        user.Email || ""
+                    )
+                    .trim()
+                    .toLowerCase();
 
 
-    byId(
-        "nsv-mca-kpi"
-    ).addEventListener(
-        "click",
-        function () {
-
-            toggleMcaFilter();
-
-        }
-    );
+                currentUserDisplayName =
+                    String(
+                        user.Title || ""
+                    )
+                    .trim();
 
 
-    byId(
-        "nsv-mca-kpi"
-    ).addEventListener(
-        "keydown",
-        function (event) {
-
-            if (
-                event.key === "Enter" ||
-                event.key === " "
-            ) {
-
-                event.preventDefault();
-
-                toggleMcaFilter();
-
-            }
-
-        }
-    );
+                isAdmin =
+                    isAdminUser();
 
 
-    byId(
-        "nsv-contractor-kpi"
-    ).addEventListener(
-        "click",
-        function () {
-
-            toggleContractorFilter();
-
-        }
-    );
-
-
-    byId(
-        "nsv-contractor-kpi"
-    ).addEventListener(
-        "keydown",
-        function (event) {
-
-            if (
-                event.key === "Enter" ||
-                event.key === " "
-            ) {
-
-                event.preventDefault();
-
-                toggleContractorFilter();
-
-            }
-
-        }
-    );
-
-
-    /* ============================================================
-       INITIALISE
-       ============================================================ */
-
-    async function initialise() {
-
-        try {
-
-            setStatus(
-                "Connecting to SharePoint..."
-            );
-
-
-            await loadList();
-
-            await loadItems();
-
-        }
-        catch (error) {
-
-            console.error(
-                "NSV Dashboard error:",
-                error
-            );
-
-
-            setStatus(
-                "ERROR: " +
-                error.message
-            );
-
-
-            var tableContainer =
-                byId(
-                    "nsv-table-container"
+                console.log(
+                    "Current SharePoint user:",
+                    currentUserDisplayName,
+                    currentUserEmail
                 );
 
 
-            if (tableContainer) {
+                console.log(
+                    "Admin access:",
+                    isAdmin
+                );
 
-                tableContainer.innerHTML = `
 
-                    <div class="nsv-error">
+                return user;
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    GET AVAILABLE SITES
+    ============================================================
+    */
+
+    function getAvailableSites() {
+
+        availableSites =
+            Object.keys(
+                SITE_ACCESS_OPTIONS
+            )
+            .sort(
+                function (a, b) {
+
+                    return a.localeCompare(
+                        b,
+                        "en-GB",
+                        {
+                            sensitivity:
+                                "base"
+                        }
+                    );
+
+                }
+            );
+
+
+        console.log(
+            "Available sites from SITE_ACCESS_OPTIONS:",
+            availableSites
+        );
+
+
+        return Promise.resolve(
+            availableSites
+        );
+
+    }
+
+
+   /* ============================================================
+   STATUS
+   ============================================================ */
+
+function getStatus(record) {
+
+    var value = String(record.Status || "").trim();
+    var lowerValue = value.toLowerCase();
+
+    // ------------------------------------------------------------
+    // High-level dashboard status
+    // ------------------------------------------------------------
+
+    if (lowerValue.indexOf("pass issued") !== -1) {
+
+        return {
+            label: "Issued",
+            description: value || "Pass issued",
+            className: "status-green"
+        };
+
+    }
+
+    if (lowerValue.indexOf("rejected") !== -1) {
+
+        return {
+            label: "Rejected",
+            description: value || "Application rejected",
+            className: "status-red"
+        };
+
+    }
+
+    if (lowerValue.indexOf("pass with") !== -1) {
+
+        return {
+            label: "Pending",
+            description: value || "Pass in progress",
+            className: "status-amber"
+        };
+
+    }
+
+    // ------------------------------------------------------------
+    // Other
+    // ------------------------------------------------------------
+
+    return {
+        label: "Other",
+        description: value || "Status unavailable",
+        className: "status-grey"
+    };
+}
+
+
+    /*
+    ============================================================
+    EXPIRY
+    ============================================================
+    */
+
+    function getExpiry(record) {
+
+        if (!record.Expiry_Date) {
+
+            return {
+
+                label: "No expiry",
+
+                className: "expiry-grey"
+
+            };
+
+        }
+
+
+        var expiry =
+            new Date(
+                record.Expiry_Date
+            );
+
+
+        var today =
+            new Date();
+
+
+        expiry.setHours(
+            23,
+            59,
+            59,
+            999
+        );
+
+
+        today.setHours(
+            0,
+            0,
+            0,
+            0
+        );
+
+
+        var days =
+            Math.ceil(
+                (
+                    expiry.getTime()
+                    -
+                    today.getTime()
+                )
+                /
+                (
+                    1000 *
+                    60 *
+                    60 *
+                    24
+                )
+            );
+
+
+        if (days < 0) {
+
+            return {
+
+                label: "Expired",
+
+                className: "expiry-red"
+
+            };
+
+        }
+
+
+        if (days <= 90) {
+
+            return {
+
+                label:
+                    days +
+                    " days remaining",
+
+                className:
+                    "expiry-amber"
+
+            };
+
+        }
+
+
+        return {
+
+            label: "Valid",
+
+            className:
+                "expiry-green"
+
+        };
+
+    }
+
+
+    /*
+    ============================================================
+    ACCESS TAGS
+    ============================================================
+    */
+
+    function accessTags(value) {
+
+        if (!value) {
+
+            return "—";
+
+        }
+
+
+        return String(value)
+            .split(",")
+            .map(
+                function (item) {
+
+                    return (
+                        '<span class="access-tag">' +
+                        escapeHtml(
+                            item.trim()
+                        ) +
+                        '</span>'
+                    );
+
+                }
+            )
+            .join("");
+
+    }
+
+
+    /*
+    ============================================================
+    GET SITES
+    ============================================================
+    */
+
+    function getSites() {
+
+        var sites = {};
+
+
+        data.forEach(
+            function (record) {
+
+                if (record.Site) {
+
+                    sites[
+                        record.Site
+                    ] = true;
+
+                }
+
+            }
+        );
+
+
+        return Object.keys(sites)
+            .sort();
+
+    }
+
+
+    /*
+    ============================================================
+    FILTER DATA
+    ============================================================
+    */
+
+    function getFilteredData() {
+
+        return data.filter(
+            function (record) {
+
+                var searchText =
+                    normalise(
+                        currentSearch
+                    );
+
+
+                var matchesSearch =
+                    !searchText
+
+                    ||
+
+                    String(
+                        record.ID || ""
+                    )
+                    .toLowerCase()
+                    .indexOf(
+                        searchText
+                    ) !== -1
+
+                    ||
+
+                    String(
+                        record.Pass_Holder || ""
+                    )
+                    .toLowerCase()
+                    .indexOf(
+                        searchText
+                    ) !== -1
+
+                    ||
+
+                    String(
+                        record.Site || ""
+                    )
+                    .toLowerCase()
+                    .indexOf(
+                        searchText
+                    ) !== -1
+
+                    ||
+
+                    String(
+                        record.Clearance_Level || ""
+                    )
+                    .toLowerCase()
+                    .indexOf(
+                        searchText
+                    ) !== -1
+
+                    ||
+
+                    String(
+                        record.Pass_Requester || ""
+                    )
+                    .toLowerCase()
+                    .indexOf(
+                        searchText
+                    ) !== -1;
+
+
+                var status =
+                    getStatus(record);
+
+
+                var matchesStatus =
+                    currentStatus === "ALL"
+                    ||
+                    status.label ===
+                    currentStatus;
+
+
+                var matchesSite =
+                    currentSite === "ALL"
+                    ||
+                    record.Site ===
+                    currentSite;
+
+
+                return (
+                    matchesSearch
+                    &&
+                    matchesStatus
+                    &&
+                    matchesSite
+                );
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    COUNTS
+    ============================================================
+    */
+
+    function getCounts() {
+
+        var issued = 0;
+
+        var pending = 0;
+
+        var rejected = 0;
+
+        var expired = 0;
+
+
+        data.forEach(
+            function (record) {
+
+                var status =
+                    getStatus(record);
+
+
+                if (
+                    status.label ===
+                    "Issued"
+                ) {
+
+                    issued++;
+
+                }
+
+
+                if (
+                    status.label ===
+                    "Pending"
+                ) {
+
+                    pending++;
+
+                }
+
+
+                if (
+                    status.label ===
+                    "Rejected"
+                ) {
+
+                    rejected++;
+
+                }
+
+
+                var expiry =
+                    getExpiry(record);
+
+
+                if (
+                    expiry.label ===
+                    "Expired"
+                ) {
+
+                    expired++;
+
+                }
+
+            }
+        );
+
+
+        return {
+
+            issued: issued,
+
+            pending: pending,
+
+            rejected: rejected,
+
+            expired: expired
+
+        };
+
+    }
+
+
+    /*
+    ============================================================
+    CSS
+    ============================================================
+    */
+
+    var style =
+        document.createElement(
+            "style"
+        );
+
+
+    style.textContent = `
+
+        #passDashboard {
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            color:#323130;
+
+            width:100%;
+
+            max-width:1250px;
+
+            margin:0 auto;
+        }
+
+
+        #passDashboard * {
+            box-sizing:border-box;
+        }
+
+
+        .dashboard-header {
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #003b5c,
+                    #0078d4
+                );
+
+            color:white;
+
+            padding:28px 30px;
+
+            border-radius:10px;
+
+            margin-bottom:18px;
+        }
+
+
+        .dashboard-header h1 {
+
+            margin:0;
+
+            font-size:28px;
+
+            font-weight:600;
+        }
+
+/* ============================================================
+   ISSUE PASS BUTTON
+   ============================================================ */
+
+.action-cell {
+    white-space: nowrap;
+}
+
+
+.issue-pass-button {
+    margin-top:5%;
+    appearance: none;
+    border: 1px solid #198754;
+    background: #198754;
+    color: #ffffff;
+    white-space:nowrap;
+    margin-left: auto;
+    display: block;
+
+    padding: 6px 12px;
+
+    border-radius: 5px;
+
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+
+    line-height: 1.4;
+
+    cursor: pointer;
+
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease,
+        box-shadow 0.15s ease,
+        transform 0.05s ease;
+}
+
+
+.issue-pass-button:hover {
+    background: #157347;
+    border-color: #146c43;
+}
+
+
+.issue-pass-button:focus {
+    outline: none;
+
+    box-shadow:
+        0 0 0 3px rgba(25, 135, 84, 0.20);
+}
+
+
+.issue-pass-button:active {
+    background: #146c43;
+    border-color: #13653f;
+
+    transform: translateY(1px);
+}
+
+
+.issue-pass-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+        .dashboard-header p {
+
+            margin:
+                6px 0 0 0;
+
+            opacity:.85;
+
+            font-size:14px;
+        }
+
+
+        .admin-banner {
+
+            background:#fff4ce;
+
+            color:#8a6d00;
+
+            border-left:
+                4px solid #ffb900;
+
+            padding:10px 14px;
+
+            border-radius:6px;
+
+            margin-bottom:15px;
+
+            font-size:13px;
+
+            font-weight:600;
+        }
+
+
+        .summary-grid {
+
+            display:grid;
+
+            grid-template-columns:
+                repeat(5,1fr);
+
+            gap:14px;
+
+            margin-bottom:18px;
+        }
+
+
+        .summary-card {
+
+            background:white;
+
+            border:
+                1px solid #edebe9;
+
+            border-radius:9px;
+
+            padding:18px;
+
+            box-shadow:
+                0 2px 6px
+                rgba(0,0,0,.05);
+        }
+
+
+        .summary-label {
+
+            font-size:11px;
+
+            font-weight:600;
+
+            text-transform:uppercase;
+
+            color:#605e5c;
+
+            letter-spacing:.5px;
+        }
+
+
+        .summary-number {
+
+            font-size:30px;
+
+            font-weight:600;
+
+            margin-top:5px;
+        }
+
+
+        .number-blue {
+            color:#0078d4;
+        }
+
+
+        .number-green {
+            color:#107c10;
+        }
+
+
+        .number-amber {
+            color:#ca5010;
+        }
+
+
+        .number-red {
+            color:#a4262c;
+        }
+
+
+        .controls {
+
+            display:flex;
+
+            gap:12px;
+
+            align-items:center;
+
+            background:white;
+
+            border:
+                1px solid #edebe9;
+
+            padding:15px;
+
+            border-radius:9px;
+
+            margin-bottom:15px;
+
+            box-shadow:
+                0 2px 6px
+                rgba(0,0,0,.05);
+        }
+
+
+        .search-box {
+
+            flex:1;
+
+            min-width:200px;
+
+            padding:
+                10px 13px;
+
+            border:
+                1px solid #8a8886;
+
+            border-radius:5px;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            font-size:14px;
+        }
+
+
+        .search-box:focus {
+
+            outline:none;
+
+            border-color:#0078d4;
+
+            box-shadow:
+                0 0 0 1px #0078d4;
+        }
+
+
+        .filter-select {
+
+            padding:
+                10px 13px;
+
+            border:
+                1px solid #8a8886;
+
+            border-radius:5px;
+
+            background:white;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            font-size:14px;
+
+            min-width:150px;
+        }
+
+
+        .record-count {
+
+            color:#605e5c;
+
+            font-size:13px;
+
+            white-space:nowrap;
+        }
+
+
+        .table-container {
+
+            background:white;
+
+            border:
+                1px solid #edebe9;
+
+            border-radius:9px;
+
+            overflow:hidden;
+
+            box-shadow:
+                0 2px 6px
+                rgba(0,0,0,.05);
+        }
+
+
+        .pass-table {
+
+            width:100%;
+
+            border-collapse:collapse;
+        }
+
+
+        .pass-table th {
+
+            background:#f3f2f1;
+
+            color:#323130;
+
+            font-size:12px;
+
+            font-weight:600;
+
+            text-align:left;
+
+            padding:13px 14px;
+
+            border-bottom:
+                1px solid #edebe9;
+
+            white-space:nowrap;
+        }
+
+
+        .pass-table td {
+
+            padding:14px;
+
+            border-bottom:
+                1px solid #f3f2f1;
+
+            font-size:13px;
+
+            vertical-align:middle;
+        }
+
+
+        .pass-table tbody tr {
+
+            cursor:pointer;
+
+            transition:
+                background .15s;
+        }
+
+
+        .pass-table tbody tr:hover {
+
+            background:#f5f9fc;
+        }
+
+
+        .pass-table tbody tr:last-child td {
+
+            border-bottom:none;
+        }
+
+
+        .id-cell {
+
+            font-weight:600;
+
+            color:#0078d4;
+        }
+
+
+        .holder-cell {
+
+            font-weight:600;
+        }
+
+
+        .status-pill {
+
+            display:inline-block;
+
+            padding:5px 10px;
+
+            border-radius:20px;
+
+            font-size:11px;
+
+            font-weight:600;
+
+            white-space:normal;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+
+
+        .status-green {
+
+            background:#dff6dd;
+
+            color:#107c10;
+        }
+
+
+        .status-amber {
+
+            background:#fff4ce;
+
+            color:#8a6d00;
+        }
+
+
+        .status-red {
+
+            background:#fde7e9;
+
+            color:#a4262c;
+        }
+
+
+        .status-grey {
+
+            background:#edebe9;
+
+            color:#605e5c;
+        }
+
+
+        .expiry-green {
+
+            color:#107c10;
+
+            font-weight:600;
+
+            font-size:11px;
+        }
+
+
+        .expiry-amber {
+
+            color:#ca5010;
+
+            font-weight:600;
+
+            font-size:11px;
+        }
+
+
+        .expiry-red {
+
+            color:#a4262c;
+
+            font-weight:600;
+
+            font-size:11px;
+        }
+
+
+        .expiry-grey {
+
+            color:#605e5c;
+
+            font-size:11px;
+        }
+
+
+        .empty-state {
+
+            padding:50px 20px;
+
+            text-align:center;
+
+            color:#605e5c;
+        }
+
+
+        .error-state {
+
+            background:#fde7e9;
+
+            border-left:
+                5px solid #a4262c;
+
+            padding:25px;
+
+            border-radius:8px;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+        }
+
+
+        .error-state h2 {
+
+            margin:
+                0 0 8px 0;
+
+            color:#a4262c;
+
+            font-size:20px;
+        }
+
+
+        .error-state p {
+
+            margin:5px 0;
+
+            color:#323130;
+
+            font-size:14px;
+        }
+
+
+        .details-overlay {
+
+            position:fixed;
+
+            top:0;
+
+            left:0;
+
+            right:0;
+
+            bottom:0;
+
+            background:
+                rgba(0,0,0,.45);
+
+            z-index:99999;
+
+            display:flex;
+
+            justify-content:center;
+
+            align-items:center;
+
+            padding:20px;
+        }
+
+
+        .details-modal {
+
+            background:white;
+
+            border-radius:10px;
+
+            width:100%;
+
+            max-width:900px;
+
+            max-height:90vh;
+
+            overflow:auto;
+
+            box-shadow:
+                0 15px 50px
+                rgba(0,0,0,.3);
+        }
+
+
+        .modal-header {
+
+            display:flex;
+
+            justify-content:space-between;
+
+            align-items:center;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #003b5c,
+                    #0078d4
+                );
+
+            color:white;
+
+            padding:20px 24px;
+        }
+
+
+        .modal-header h2 {
+
+            margin:0;
+
+            font-size:21px;
+        }
+
+
+        .close-button {
+
+            border:none;
+
+            background:
+                rgba(255,255,255,.15);
+
+            color:white;
+
+            width:34px;
+
+            height:34px;
+
+            border-radius:50%;
+
+            font-size:20px;
+
+            cursor:pointer;
+        }
+
+
+        .close-button:hover {
+
+            background:
+                rgba(255,255,255,.3);
+        }
+
+
+        .modal-body {
+
+            padding:24px;
+        }
+
+
+        .detail-grid {
+
+            display:grid;
+
+            grid-template-columns:
+                1fr 1fr;
+
+            gap:20px;
+        }
+
+
+        .detail-section {
+
+            border:
+                1px solid #edebe9;
+
+            border-radius:8px;
+
+            overflow:hidden;
+        }
+
+
+        .detail-section-full {
+
+            grid-column:
+                1 / -1;
+        }
+
+
+        .detail-section-title {
+
+            background:#f3f2f1;
+
+            padding:12px 15px;
+
+            font-weight:600;
+
+            font-size:14px;
+        }
+
+
+        .detail-section-body {
+
+            padding:15px;
+        }
+
+
+        .detail-row {
+
+            display:grid;
+
+            grid-template-columns:
+                145px 1fr;
+
+            gap:12px;
+
+            padding:8px 0;
+
+            border-bottom:
+                1px solid #f3f2f1;
+        }
+
+
+        .detail-row:last-child {
+
+            border-bottom:none;
+        }
+
+
+        .detail-label {
+
+            color:#605e5c;
+
+            font-size:12px;
+
+            font-weight:600;
+        }
+
+
+        .detail-value {
+
+            font-size:13px;
+
+            word-break:break-word;
+        }
+
+
+        .access-tags {
+
+            line-height:1.8;
+        }
+
+
+        .access-tag {
+
+            display:inline-block;
+
+            background:#e8f1f8;
+
+            color:#005a9e;
+
+            padding:5px 9px;
+
+            margin:3px;
+
+            border-radius:4px;
+
+            font-size:11px;
+        }
+
+
+        .justification {
+
+            background:#f8f9fa;
+
+            border-left:
+                4px solid #0078d4;
+
+            padding:13px;
+
+            line-height:1.5;
+
+            font-size:13px;
+        }
+
+
+        .person {
+
+            display:flex;
+
+            align-items:center;
+
+            gap:12px;
+
+            margin-bottom:10px;
+        }
+
+
+        .person img {
+
+            width:50px;
+
+            height:50px;
+
+            border-radius:50%;
+
+            object-fit:cover;
+
+            background:#edebe9;
+        }
+
+
+        .person-name {
+
+            font-weight:600;
+
+            font-size:14px;
+        }
+
+
+        .person-email {
+
+            color:#605e5c;
+
+            font-size:12px;
+        }
+
+
+        /*
+        ========================================================
+        APPLICATION NAVIGATION
+        ========================================================
+        */
+
+        .pass-app-nav {
+
+            display:flex;
+
+            justify-content:space-between;
+
+            align-items:center;
+
+            gap:15px;
+
+            margin-bottom:18px;
+
+            background:white;
+
+            border:
+                1px solid #edebe9;
+
+            border-radius:9px;
+
+            padding:12px 15px;
+
+            box-shadow:
+                0 2px 6px
+                rgba(0,0,0,.05);
+        }
+
+
+        .pass-app-nav-title {
+
+            font-size:14px;
+
+            font-weight:600;
+
+            color:#323130;
+        }
+
+
+        .pass-app-nav-buttons {
+
+            display:flex;
+
+            gap:8px;
+
+            flex-wrap:wrap;
+        }
+
+
+        .pass-nav-button {
+
+            border:none;
+
+            border-radius:5px;
+
+            padding:9px 14px;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            font-size:13px;
+
+            font-weight:600;
+
+            cursor:pointer;
+
+            background:#f3f2f1;
+
+            color:#323130;
+        }
+
+
+        .pass-nav-button:hover {
+
+            background:#e1dfdd;
+        }
+
+
+        .pass-nav-button-primary {
+
+            background:#0078d4;
+
+            color:white;
+        }
+
+
+        .pass-nav-button-primary:hover {
+
+            background:#106ebe;
+        }
+
+
+        .pass-nav-button-admin {
+
+            background:#003b5c;
+
+            color:white;
+        }
+
+
+        .pass-nav-button-admin:hover {
+
+            background:#002b44;
+        }
+
+
+        /*
+        ========================================================
+        HOME
+        ========================================================
+        */
+
+        .pass-home {
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+        }
+
+
+        .pass-home-header {
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #003b5c,
+                    #0078d4
+                );
+
+            color:white;
+
+            padding:40px;
+
+            border-radius:10px;
+
+            margin-bottom:20px;
+        }
+
+
+        .pass-home-header h1 {
+
+            margin:0;
+
+            font-size:30px;
+
+            font-weight:600;
+        }
+
+
+        .pass-home-header p {
+
+            margin:8px 0 0 0;
+
+            font-size:15px;
+
+            opacity:.9;
+        }
+
+
+        .pass-choice-grid {
+
+            display:grid;
+
+            grid-template-columns:
+                repeat(2, 1fr);
+
+            gap:20px;
+        }
+
+
+        .pass-choice-card {
+
+            background:white;
+
+            border:
+                1px solid #edebe9;
+
+            border-radius:10px;
+
+            padding:30px;
+
+            box-shadow:
+                0 2px 8px
+                rgba(0,0,0,.06);
+
+            cursor:pointer;
+
+            transition:
+                transform .15s,
+                box-shadow .15s,
+                border-color .15s;
+        }
+
+
+        .pass-choice-card:hover {
+
+            transform:
+                translateY(-2px);
+
+            border-color:#0078d4;
+
+            box-shadow:
+                0 5px 15px
+                rgba(0,0,0,.10);
+        }
+
+
+        .pass-choice-icon {
+
+            width:48px;
+
+            height:48px;
+
+            border-radius:50%;
+
+            display:flex;
+
+            align-items:center;
+
+            justify-content:center;
+
+            background:#e8f1f8;
+
+            color:#0078d4;
+
+            font-size:23px;
+
+            margin-bottom:18px;
+        }
+
+
+        .pass-choice-card h2 {
+
+            margin:
+                0 0 8px 0;
+
+            font-size:20px;
+
+            color:#323130;
+        }
+
+
+        .pass-choice-card p {
+
+            margin:0;
+
+            color:#605e5c;
+
+            font-size:14px;
+
+            line-height:1.5;
+        }
+
+
+        /*
+        ========================================================
+        PASS HOLDER USER PICKER
+        ========================================================
+        */
+
+        .pass-user-picker {
+            position: relative;
+        }
+
+
+        .pass-user-results {
+            display: none;
+
+            position: absolute;
+
+            top: 100%;
+            left: 0;
+            right: 0;
+
+            z-index: 1000;
+
+            background: #ffffff;
+
+            border: 1px solid #d0d7de;
+
+            border-radius: 0 0 6px 6px;
+
+            box-shadow:
+                0 4px 12px rgba(0, 0, 0, 0.12);
+
+            max-height: 300px;
+
+            overflow-y: auto;
+        }
+
+
+        .pass-user-result {
+            display: flex;
+
+            align-items: center;
+
+            gap: 12px;
+
+            padding: 12px 14px;
+
+            cursor: pointer;
+
+            border-bottom: 1px solid #eeeeee;
+
+            transition:
+                background-color 0.15s ease;
+        }
+
+
+        .pass-user-result:last-child {
+            border-bottom: none;
+        }
+
+
+        .pass-user-result:hover {
+            background-color: #f3f6f9;
+        }
+
+
+        .pass-user-result-icon {
+            width: 36px;
+            height: 36px;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            background: #e8f1fb;
+
+            border-radius: 50%;
+
+            flex-shrink: 0;
+        }
+
+
+        .pass-user-result-details {
+            min-width: 0;
+        }
+
+
+        .pass-user-result-name {
+            font-weight: 600;
+
+            color: #1f2937;
+
+            font-size: 14px;
+        }
+
+
+        .pass-user-result-email {
+            margin-top: 3px;
+
+            color: #6b7280;
+
+            font-size: 13px;
+
+            overflow: hidden;
+
+            text-overflow: ellipsis;
+
+            white-space: nowrap;
+        }
+
+
+        .pass-user-no-results {
+            padding: 14px;
+
+            color: #6b7280;
+
+            font-size: 14px;
+        }
+
+
+        .pass-user-search-error {
+            padding: 14px;
+
+            color: #b91c1c;
+
+            font-size: 14px;
+        }
+
+
+        /*
+        ========================================================
+        SELECTED USER
+        ========================================================
+        */
+
+        .pass-user-selected {
+            display: none;
+
+            margin-top: 8px;
+        }
+
+
+        .pass-selected-user {
+            display: flex;
+
+            align-items: center;
+
+            gap: 12px;
+
+            padding: 10px 12px;
+
+            background: #f3f7fb;
+
+            border: 1px solid #b8cde3;
+
+            border-radius: 6px;
+        }
+
+
+        .pass-selected-user-icon {
+            width: 38px;
+            height: 38px;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            background: #dceaf7;
+
+            border-radius: 50%;
+
+            flex-shrink: 0;
+        }
+
+
+        .pass-selected-user-details {
+            flex: 1;
+
+            min-width: 0;
+        }
+
+
+        .pass-selected-user-name {
+            font-weight: 600;
+
+            color: #1f2937;
+
+            font-size: 14px;
+        }
+
+
+        .pass-selected-user-email {
+            margin-top: 3px;
+
+            color: #6b7280;
+
+            font-size: 13px;
+        }
+
+
+        .pass-selected-user-remove {
+            width: 30px;
+            height: 30px;
+
+            border: none;
+
+            background: transparent;
+
+            color: #6b7280;
+
+            font-size: 22px;
+
+            line-height: 1;
+
+            cursor: pointer;
+
+            border-radius: 4px;
+        }
+
+
+        .pass-selected-user-remove:hover {
+            background: #e5e7eb;
+
+            color: #111827;
+        }
+
+
+        /*
+        ========================================================
+        FORM
+        ========================================================
+        */
+
+        .pass-form-container {
+
+            background:white;
+
+            border:
+                1px solid #edebe9;
+
+            border-radius:10px;
+
+            padding:28px;
+
+            box-shadow:
+                0 2px 8px
+                rgba(0,0,0,.06);
+        }
+
+
+        .pass-form-header {
+
+            margin-bottom:25px;
+        }
+
+
+        .pass-form-header h1 {
+
+            margin:0;
+
+            font-size:26px;
+
+            color:#003b5c;
+        }
+
+
+        .pass-form-header p {
+
+            margin:
+                6px 0 0 0;
+
+            color:#605e5c;
+
+            font-size:14px;
+        }
+
+
+        .pass-form-grid {
+
+            display:grid;
+
+            grid-template-columns:
+                1fr 1fr;
+
+            gap:18px;
+        }
+
+
+        .pass-form-field {
+
+            display:flex;
+
+            flex-direction:column;
+
+            gap:6px;
+        }
+
+
+        .pass-form-field-full {
+
+            grid-column:
+                1 / -1;
+        }
+
+
+        .pass-form-label {
+
+            font-size:13px;
+
+            font-weight:600;
+
+            color:#323130;
+        }
+
+
+        .pass-form-required {
+
+            color:#a4262c;
+        }
+
+
+        .pass-form-input,
+        .pass-form-select,
+        .pass-form-textarea {
+
+            width:100%;
+
+            padding:
+                10px 12px;
+
+            border:
+                1px solid #8a8886;
+
+            border-radius:5px;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            font-size:14px;
+
+            color:#323130;
+
+            background:white;
+        }
+
+
+        /*
+        --------------------------------------------------------
+        MULTI-SELECT ACCESS DROPDOWN
+        --------------------------------------------------------
+        */
+
+        .pass-access-select {
+
+            min-height:130px;
+
+            padding:6px 8px;
+
+            cursor:pointer;
+        }
+
+
+        .pass-access-select:disabled {
+
+            background:#f3f2f1;
+
+            color:#a19f9d;
+
+            cursor:not-allowed;
+        }
+
+
+        .pass-access-select option {
+
+            padding:7px 8px;
+        }
+
+
+        .pass-access-select option:checked {
+
+            background:#0078d4;
+
+            color:white;
+        }
+
+
+        .pass-form-input:focus,
+        .pass-form-select:focus,
+        .pass-form-textarea:focus {
+
+            outline:none;
+
+            border-color:#0078d4;
+
+            box-shadow:
+                0 0 0 1px #0078d4;
+        }
+
+
+        .pass-form-textarea {
+
+            min-height:110px;
+
+            resize:vertical;
+        }
+
+
+        .pass-form-help {
+
+            font-size:11px;
+
+            color:#605e5c;
+        }
+
+
+        /*
+        ========================================================
+        ATTACHMENT UPLOAD
+        ========================================================
+        */
+
+        .pass-attachment-wrapper {
+
+            width:100%;
+        }
+
+
+        .pass-attachment-input {
+
+            width:100%;
+
+            padding:9px 10px;
+
+            border:
+                1px dashed #8a8886;
+
+            border-radius:6px;
+
+            background:#faf9f8;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            font-size:13px;
+
+            color:#323130;
+
+            cursor:pointer;
+        }
+
+
+        .pass-attachment-input:hover {
+
+            border-color:#0078d4;
+
+            background:#f5f9fc;
+        }
+
+
+        .pass-attachment-input:focus {
+
+            outline:none;
+
+            border-color:#0078d4;
+
+            box-shadow:
+                0 0 0 1px #0078d4;
+        }
+
+
+        .pass-attachment-selected {
+
+            display:none;
+
+            margin-top:8px;
+
+            padding:9px 11px;
+
+            background:#f3f7fb;
+
+            border:
+                1px solid #b8cde3;
+
+            border-radius:6px;
+
+            align-items:center;
+
+            gap:10px;
+        }
+
+
+        .pass-attachment-selected-icon {
+
+            width:32px;
+
+            height:32px;
+
+            display:flex;
+
+            align-items:center;
+
+            justify-content:center;
+
+            background:#dceaf7;
+
+            border-radius:5px;
+
+            flex-shrink:0;
+
+            font-size:16px;
+        }
+
+
+        .pass-attachment-selected-details {
+
+            flex:1;
+
+            min-width:0;
+        }
+
+
+        .pass-attachment-selected-name {
+
+            font-size:13px;
+
+            font-weight:600;
+
+            color:#323130;
+
+            overflow:hidden;
+
+            text-overflow:ellipsis;
+
+            white-space:nowrap;
+        }
+
+
+        .pass-attachment-selected-size {
+
+            margin-top:2px;
+
+            font-size:11px;
+
+            color:#605e5c;
+        }
+
+
+        .pass-attachment-remove {
+
+            width:30px;
+
+            height:30px;
+
+            border:none;
+
+            background:transparent;
+
+            color:#6b7280;
+
+            font-size:20px;
+
+            line-height:1;
+
+            cursor:pointer;
+
+            border-radius:4px;
+
+            flex-shrink:0;
+        }
+
+
+        .pass-attachment-remove:hover {
+
+            background:#e5e7eb;
+
+            color:#111827;
+        }
+
+
+        .pass-attachment-error {
+
+            display:none;
+
+            margin-top:6px;
+
+            color:#a4262c;
+
+            font-size:12px;
+
+            line-height:1.4;
+        }
+
+
+        .pass-attachment-uploading {
+
+            display:none;
+
+            margin-top:8px;
+
+            padding:9px 11px;
+
+            background:#f3f7fb;
+
+            border-left:
+                4px solid #0078d4;
+
+            border-radius:4px;
+
+            color:#005a9e;
+
+            font-size:12px;
+
+            font-weight:600;
+        }
+
+
+        .pass-form-actions {
+
+            display:flex;
+
+            justify-content:flex-end;
+
+            gap:10px;
+
+            margin-top:25px;
+
+            padding-top:20px;
+
+            border-top:
+                1px solid #edebe9;
+        }
+
+
+        .pass-form-button {
+
+            border:none;
+
+            border-radius:5px;
+
+            padding:11px 20px;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            font-size:14px;
+
+            font-weight:600;
+
+            cursor:pointer;
+        }
+
+
+        .pass-form-cancel {
+
+            background:#f3f2f1;
+
+            color:#323130;
+        }
+
+
+        .pass-form-submit {
+
+            background:#0078d4;
+
+            color:white;
+        }
+
+
+        .pass-form-submit:hover {
+
+            background:#106ebe;
+        }
+
+
+        .pass-form-submit:disabled {
+
+            background:#c8c6c4;
+
+            cursor:not-allowed;
+        }
+
+
+        .pass-form-message {
+
+            display:none;
+
+            padding:
+                14px 16px;
+
+            border-radius:6px;
+
+            margin-bottom:20px;
+
+            font-size:13px;
+        }
+
+
+        .pass-form-message-success {
+
+            display:block;
+
+            background:#dff6dd;
+
+            color:#107c10;
+
+            border-left:
+                4px solid #107c10;
+        }
+
+
+        .pass-form-message-error {
+
+            display:block;
+
+            background:#fde7e9;
+
+            color:#a4262c;
+
+            border-left:
+                4px solid #a4262c;
+        }
+
+
+        .pass-site-loading {
+
+            color:#605e5c;
+
+            font-size:12px;
+
+            padding:
+                4px 0;
+        }
+
+
+        .pass-site-error {
+
+            color:#a4262c;
+
+            font-size:12px;
+
+            padding:
+                4px 0;
+        }
+
+
+        @media (max-width:900px) {
+
+            .summary-grid {
+
+                grid-template-columns:
+                    repeat(2,1fr);
+            }
+
+
+            .controls {
+
+                flex-wrap:wrap;
+            }
+
+
+            .search-box {
+
+                flex-basis:100%;
+            }
+
+
+            .table-container {
+
+                overflow-x:auto;
+            }
+
+
+            .pass-table {
+
+                min-width:800px;
+            }
+
+
+            .detail-grid {
+
+                grid-template-columns:1fr;
+            }
+
+
+            .detail-section-full {
+
+                grid-column:auto;
+            }
+
+        }
+
+
+        @media (max-width:700px) {
+
+            .pass-choice-grid {
+
+                grid-template-columns:1fr;
+            }
+
+
+            .pass-form-grid {
+
+                grid-template-columns:1fr;
+            }
+
+
+            .pass-form-field-full {
+
+                grid-column:auto;
+            }
+
+
+            .pass-home-header {
+
+                padding:28px;
+            }
+
+
+            .pass-form-container {
+
+                padding:20px;
+            }
+
+        }
+
+
+        @media (max-width:550px) {
+
+            .summary-grid {
+
+                grid-template-columns:1fr;
+            }
+
+
+            .dashboard-header h1 {
+
+                font-size:22px;
+            }
+
+        }
+
+    `;
+
+
+    document.head.appendChild(style);
+
+
+    /*
+    ============================================================
+    APPLICATION NAVIGATION
+    ============================================================
+    */
+
+    function renderNavigation() {
+
+        var adminButton = "";
+
+
+        if (isAdmin) {
+
+            adminButton = `
+
+                <button
+                    type="button"
+                    class="pass-nav-button pass-nav-button-admin"
+                    id="passAdminDashboardButton"
+                >
+                    Admin Dashboard
+                </button>
+
+            `;
+
+        }
+
+
+        return `
+
+            <div class="pass-app-nav">
+
+                <div class="pass-app-nav-title">
+                    Building Pass Request Solution
+                </div>
+
+                <div class="pass-app-nav-buttons">
+
+                    <button
+                        type="button"
+                        class="pass-nav-button"
+                        id="passHomeButton"
+                    >
+                        Home
+                    </button>
+
+
+                    <button
+                        type="button"
+                        class="pass-nav-button"
+                        id="passSubmitButton"
+                    >
+                        Submit Request
+                    </button>
+
+
+                    <button
+                        type="button"
+                        class="pass-nav-button pass-nav-button-primary"
+                        id="passDashboardButton"
+                    >
+                        Reporting Dashboard
+                    </button>
+
+
+                    ${adminButton}
+
+                </div>
+
+            </div>
+
+        `;
+
+    }
+
+
+    /*
+    ============================================================
+    HOME PAGE
+    ============================================================
+    */
+
+    function renderHome() {
+
+        dashboard.innerHTML = `
+
+            <div class="pass-home">
+
+                ${renderNavigation()}
+
+
+                <div class="pass-home-header">
+
+                    <h1>
+                        Building Pass Request Solution
+                    </h1>
+
+                    <p>
+                        Submit a new Building Pass Request or
+                        view the reporting dashboard.
+                    </p>
+
+                </div>
+
+
+                <div class="pass-choice-grid">
+
+
+                    <div
+                        class="pass-choice-card"
+                        id="openSubmissionCard"
+                    >
+
+                        <div class="pass-choice-icon">
+                            +
+                        </div>
 
                         <h2>
-                            Unable to load NSV Workbook
+                            Submit a Pass Request
                         </h2>
 
-                        <pre>${escapeHtml(
-                            error.message
-                        )}</pre>
+                        <p>
+                            Complete the Building Pass Request
+                            form and submit it directly to the
+                            Building Pass register.
+                        </p>
+
+                    </div>
+
+
+                    <div
+                        class="pass-choice-card"
+                        id="openDashboardCard"
+                    >
+
+                        <div class="pass-choice-icon">
+                            ☷
+                        </div>
+
+                        <h2>
+                            Reporting Dashboard
+                        </h2>
+
+                        <p>
+                            View your current pass requests,
+                            statuses, expiry information,
+                            sites and access permissions.
+                        </p>
+
+                    </div>
+
+
+                    ${
+                        isAdmin
+                        ?
+                        `
+                            <div
+                                class="pass-choice-card"
+                                id="openAdminDashboardCard"
+                            >
+
+                                <div class="pass-choice-icon">
+                                    ⚙
+                                </div>
+
+                                <h2>
+                                    Admin Dashboard
+                                </h2>
+
+                                <p>
+                                    View and search all access
+                                    pass requests across the
+                                    Building Pass register.
+                                </p>
+
+                            </div>
+                        `
+                        :
+                        ""
+                    }
+
+
+                </div>
+
+            </div>
+
+        `;
+
+
+        document
+            .getElementById(
+                "openSubmissionCard"
+            )
+            .addEventListener(
+                "click",
+                function () {
+
+                    currentView =
+                        "submit";
+
+                    renderSubmissionForm();
+
+                }
+            );
+
+
+        document
+            .getElementById(
+                "openDashboardCard"
+            )
+            .addEventListener(
+                "click",
+                function () {
+
+                    currentView =
+                        "dashboard";
+
+                    prepareUserDashboard();
+
+                }
+            );
+
+
+        var adminCard =
+            document.getElementById(
+                "openAdminDashboardCard"
+            );
+
+
+        if (adminCard) {
+
+            adminCard.addEventListener(
+                "click",
+                function () {
+
+                    if (!isAdmin) {
+
+                        return;
+
+                    }
+
+
+                    currentView =
+                        "admin";
+
+                    prepareAdminDashboard();
+
+                }
+            );
+
+        }
+
+
+        bindNavigation();
+
+    }
+
+
+    /*
+    ============================================================
+    SUBMISSION FORM
+    ============================================================
+    */
+
+    function renderSubmissionForm() {
+
+        dashboard.innerHTML = `
+
+            <div>
+
+                ${renderNavigation()}
+
+                <div class="dashboard-header">
+
+                    <h1>
+                        Building Pass Request Form
+                    </h1>
+
+                </div>
+
+
+                <div class="pass-form-container">
+
+                    <div class="pass-form-header">
+
+                        <h1>
+                            Submit Building Pass Request
+                        </h1>
+
+                        <p>
+                            Please provide the details required
+                            for the Building Pass Request. Please note, Building Pass Requests can be submitted for yourself, but will be subject to an approval by your Line Manager, or alternatively your Line Manager can submit on your behalf.
+                        </p>
+
+                    </div>
+
+
+                    <div
+                        id="passFormMessage"
+                        class="pass-form-message"
+                    ></div>
+
+
+                    <form
+                        id="passSubmissionForm"
+                        novalidate
+                    >
+
+
+<div class="pass-form-grid">
+    <div class="pass-form-field">
+        <label class="pass-form-label">
+            Are you a new starter?
+            <span class="pass-form-required">*</span>
+        </label>
+
+        <select id="formNewStarter" class="pass-form-input" required>
+            <option value="">Please select</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+        </select>
+    </div>
+    
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Pass Requester
+
+                                </label>
+
+                                <input
+                                    type="text"
+                                    id="formPassRequester"
+                                    class="pass-form-input"
+                                    readonly
+                                >
+
+                                <div class="pass-form-help">
+
+                                    The request will be associated
+                                    with your current SharePoint account.
+
+                                </div>
+
+                            </div>
+    </div>
+    <br>
+    <div class="pass-form-grid">
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Pass Holder
+                                    <span class="pass-form-required">*</span>
+
+                                </label>
+
+
+                                <div
+                                    class="pass-user-picker"
+                                    id="passHolderPicker"
+                                >
+
+                                    <input
+                                        type="text"
+                                        id="formPassHolderSearch"
+                                        class="pass-form-input"
+                                        placeholder="Start typing a name..."
+                                        autocomplete="off"
+                                    >
+
+
+                                    <div
+                                        id="passHolderResults"
+                                        class="pass-user-results"
+                                    ></div>
+
+
+                                    <div
+                                        id="passHolderSelected"
+                                        class="pass-user-selected"
+                                    ></div>
+
+
+                                    <input
+                                        type="hidden"
+                                        id="formPassHolder"
+                                        value=""
+                                    >
+
+                                </div>
+                                
+
+
+
+
+
+                                <div class="pass-form-help">
+
+                                    Start typing the pass holder's name and select
+                                    the correct person from the results.
+
+                                </div>
+
+                            </div>
+
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Site
+                                    <span class="pass-form-required">*</span>
+
+                                </label>
+
+                                <select
+                                    id="formSite"
+                                    class="pass-form-select"
+                                    required
+                                >
+
+                                    <option value="">
+                                        Loading sites...
+                                    </option>
+
+                                </select>
+
+                                <div
+                                    id="passSiteStatus"
+                                    class="pass-site-loading"
+                                >
+                                    Loading available sites...
+                                </div>
+
+                            </div>
+
+
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Clearance Level
+                                    <span class="pass-form-required">*</span>
+
+                                </label>
+
+                                <select
+                                    id="formClearance"
+                                    class="pass-form-select"
+                                    required
+                                >
+
+                                    <option value="">
+                                        Select clearance
+                                    </option>
+
+                                    <option value="BPSS">
+                                        BPSS (Baseline Personnel Security Standard) - Blue stripe
+                                    </option>
+
+                                    <option value="CTC">
+                                        CTC (Counter Terrorism Check) - Red stripe
+                                    </option>
+
+                                    <option value="SC">
+                                        SC (Security Check) - Yellow stripe
+                                    </option>
+
+                                    <option value="DV">
+                                        DV (Developed Vetting) - Green stripe
+                                    </option>
+
+                                </select>
+
+                            </div>
+
+
+<div
+    class="pass-form-field"
+    id="nationalInsuranceField"
+    style="display: none;"
+>
+    <label class="pass-form-label">
+        National Insurance Number
+        <span class="pass-form-required">*</span>
+    </label>
+
+    <input
+        type="text"
+        id="formNationalInsurance"
+        class="pass-form-input"
+    >
+</div>
+
+</div>
+<br>
+
+                            <!--
+                            ====================================================
+                            PDF ATTACHMENT
+                            ====================================================
+                            -->
+<div class="pass-form-grid">
+
+                            <div
+                                class="pass-form-field pass-form-field-full" id="formAttachmentFull"
+                            >
+
+                                <label class="pass-form-label">
+
+                                    Optional supporting document (PDF)
+
+                                </label>
+
+
+                                <div class="pass-attachment-wrapper">
+
+                                    <input
+                                        type="file"
+                                        id="formAttachmentPdf"
+                                        class="pass-attachment-input"
+                                        accept=".pdf,application/pdf"
+                                    >
+
+
+                                    <div
+                                        class="pass-form-help"
+                                    >
+
+                                        Optional. PDF only.
+                                        Maximum file size: 10 MB.
+
+                                    </div>
+
+
+                                    <div
+                                        id="passAttachmentPdfError"
+                                        class="pass-attachment-error"
+                                    ></div>
+
+
+                                    <div
+                                        id="passAttachmentPdfSelected"
+                                        class="pass-attachment-selected"
+                                    ></div>
+
+
+                                    <div
+                                        id="passAttachmentPdfUploading"
+                                        class="pass-attachment-uploading"
+                                    >
+                                        Uploading attachment...
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+</div>
+<br>
+<div class="pass-form-grid">
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Required Date
+                                    <span class="pass-form-required">*</span>
+
+                                </label>
+
+                                <input
+                                    type="date"
+                                    id="formRequiredDate"
+                                    class="pass-form-input"
+                                    required
+                                >
+
+                            </div>
+
+
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Expiry Date
+
+                                </label>
+
+                                <input
+                                    type="date"
+                                    id="formExpiryDate"
+                                    class="pass-form-input"
+                                >
+
+                            </div>
+
+
+
+
+                            <div class="pass-form-field">
+
+                                <label class="pass-form-label">
+
+                                    Access Permissions
+                                    <span class="pass-form-required">*</span>
+
+                                </label>
+
+                                <select
+                                    id="formAccess"
+                                    class="pass-form-select pass-access-select"
+                                    multiple
+                                    required
+                                    disabled
+                                >
+
+                                    <option value="">
+                                        Select a site first
+                                    </option>
+
+                                </select>
+
+                                <div
+                                    id="passAccessStatus"
+                                    class="pass-form-help"
+                                >
+                                    Select a site to see available access areas.
+
+                                </div>
+
+                            </div>
+
+
+                            <div
+                                class="pass-form-field pass-form-field-full"
+                            >
+
+                                <label class="pass-form-label">
+
+                                    Justification
+                                    <span class="pass-form-required">*</span>
+
+                                </label>
+
+                                <textarea
+                                    id="formJustification"
+                                    class="pass-form-textarea"
+                                    required
+                                ></textarea>
+
+                            </div>
+
+
+                            <!--
+                            ====================================================
+                            ATTACHMENT
+                            ====================================================
+                            -->
+
+                            <div
+                                class="pass-form-field pass-form-field-full"
+                            >
+
+                                <label class="pass-form-label">
+
+                                    Optional picture of passholder
+
+                                </label>
+
+
+                                <div class="pass-attachment-wrapper">
+
+                                    <input
+                                        type="file"
+                                        id="formAttachment"
+                                        class="pass-attachment-input"
+                                        accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                                    >
+
+
+                                    <div
+                                        class="pass-form-help"
+                                    >
+
+                                        Optional. JPG, JPEG or PNG only.
+                                        Maximum file size: 10 MB.
+
+                                    </div>
+
+
+                                    <div
+                                        id="passAttachmentError"
+                                        class="pass-attachment-error"
+                                    ></div>
+
+
+                                    <div
+                                        id="passAttachmentSelected"
+                                        class="pass-attachment-selected"
+                                    ></div>
+
+
+                                    <div
+                                        id="passAttachmentUploading"
+                                        class="pass-attachment-uploading"
+                                    >
+                                        Uploading attachment...
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+
+
+
+
+                        </div>
+
+
+                        <div class="pass-form-actions">
+
+                            <button
+                                type="button"
+                                id="passFormCancel"
+                                class="pass-form-button pass-form-cancel"
+                            >
+                                Cancel
+                            </button>
+
+
+                            <button
+                                type="submit"
+                                id="passFormSubmit"
+                                class="pass-form-button pass-form-submit"
+                            >
+                                Submit Request
+                            </button>
+
+                        </div>
+
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        `;
+
+
+        bindNavigation();
+
+
+        var requesterField =
+            document.getElementById(
+                "formPassRequester"
+            );
+
+
+        if (requesterField) {
+
+            requesterField.value =
+                currentUserEmail ||
+                currentUserDisplayName ||
+                "";
+
+        }
+
+
+        var siteSelect =
+            document.getElementById(
+                "formSite"
+            );
+
+
+        var siteStatus =
+            document.getElementById(
+                "passSiteStatus"
+            );
+
+
+        var accessSelect =
+            document.getElementById(
+                "formAccess"
+            );
+
+
+const newStarterSelect = document.getElementById("formNewStarter");
+const clearanceSelect = document.getElementById("formClearance");
+const nationalInsuranceField = document.getElementById("nationalInsuranceField");
+const nationalInsuranceInput = document.getElementById("formNationalInsurance");
+const attachmentPdfField = document.getElementById("formAttachmentPdf");
+const attachmentPdfField1 = document.getElementById("formAttachmentFull");
+
+function updateNationalInsuranceVisibility() {
+    const isNewStarter = newStarterSelect.value === "yes";
+    const clearance = clearanceSelect.value;
+
+    const clearanceRequiresNI = ["CTC", "SC", "DV"].includes(clearance);
+    const shouldShowNI = isNewStarter && clearanceRequiresNI;
+
+    // Show/hide National Insurance field
+    if (shouldShowNI) {
+        nationalInsuranceField.style.display = "";
+        nationalInsuranceInput.required = true;
+    } else {
+        nationalInsuranceField.style.display = "none";
+        nationalInsuranceInput.required = false;
+        nationalInsuranceInput.value = "";
+    }
+
+    // Show/hide Attachment PDF field
+    if (shouldShowNI) {
+        attachmentPdfField1.style.display = "";
+    } else {
+        attachmentPdfField1.style.display = "none";
+    }
+}
+
+newStarterSelect.addEventListener("change", updateNationalInsuranceVisibility);
+clearanceSelect.addEventListener("change", updateNationalInsuranceVisibility);
+
+// Set the correct initial state
+updateNationalInsuranceVisibility();
+
+
+
+        /*
+        --------------------------------------------------------
+        PASS HOLDER USER SEARCH
+        --------------------------------------------------------
+        */
+
+        selectedPassHolder =
+            null;
+
+
+        var passHolderSearch =
+            document.getElementById(
+                "formPassHolderSearch"
+            );
+
+
+        if (passHolderSearch) {
+
+            passHolderSearch.addEventListener(
+                "input",
+                function () {
+
+                    var searchText =
+                        this.value.trim();
+
+
+                    if (
+                        selectedPassHolder
+                    ) {
+
+                        selectedPassHolder =
+                            null;
+
+
+                        var hiddenField =
+                            document.getElementById(
+                                "formPassHolder"
+                            );
+
+
+                        if (hiddenField) {
+
+                            hiddenField.value =
+                                "";
+
+                        }
+
+                    }
+
+
+                    clearTimeout(
+                        passHolderSearchTimer
+                    );
+
+
+                    passHolderSearchTimer =
+                        setTimeout(
+                            function () {
+
+                                searchPassHolders(
+                                    searchText
+                                );
+
+                            },
+                            300
+                        );
+
+                }
+            );
+
+        }
+
+
+        /*
+        --------------------------------------------------------
+        SITE CHANGE -> UPDATE ACCESS OPTIONS
+        --------------------------------------------------------
+        */
+
+        if (siteSelect) {
+
+            siteSelect.addEventListener(
+                "change",
+                function () {
+
+                    updateAccessPermissionsDropdown(
+                        true
+                    );
+
+                }
+            );
+
+        }
+
+
+        populateSiteDropdown();
+
+
+        /*
+        --------------------------------------------------------
+        INITIAL ACCESS DROPDOWN STATE
+        --------------------------------------------------------
+        */
+
+        if (accessSelect) {
+
+            updateAccessPermissionsDropdown(
+                true
+            );
+
+        }
+
+
+        /*
+        --------------------------------------------------------
+        ATTACHMENT FILE INPUT
+        --------------------------------------------------------
+        */
+
+        var attachmentInput =
+            document.getElementById(
+                "formAttachment"
+            );
+
+
+        if (attachmentInput) {
+
+            attachmentInput.addEventListener(
+                "change",
+                function () {
+
+                    validateAndDisplayAttachment(
+                        this
+                    );
+
+                }
+            );
+
+        }
+
+
+        /*
+        --------------------------------------------------------
+        PDF ATTACHMENT FILE INPUT
+        --------------------------------------------------------
+        */
+
+        var attachmentPdfInput =
+            document.getElementById(
+                "formAttachmentPdf"
+            );
+
+
+        if (attachmentPdfInput) {
+
+            attachmentPdfInput.addEventListener(
+                "change",
+                function () {
+
+                    validateAndDisplayPdfAttachment(
+                        this
+                    );
+
+                }
+            );
+
+        }
+
+
+        document
+            .getElementById(
+                "passFormCancel"
+            )
+            .addEventListener(
+                "click",
+                function () {
+
+                    currentView =
+                        "home";
+
+                    renderHome();
+
+                }
+            );
+
+
+        document
+            .getElementById(
+                "passSubmissionForm"
+            )
+            .addEventListener(
+                "submit",
+                function (event) {
+
+                    event.preventDefault();
+
+                    submitPassRequest();
+
+                }
+            );
+
+    }
+
+
+    /*
+    ============================================================
+    ATTACHMENT HELPERS
+    ============================================================
+    */
+
+
+function validateAndDisplayAttachment(input) {
+
+    var selectedContainer =
+        document.getElementById(
+            "passAttachmentSelected"
+        );
+
+    showAttachmentError("");
+
+    if (
+        !input ||
+        !input.files ||
+        input.files.length === 0
+    ) {
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML = "";
+            selectedContainer.style.display = "none";
+
+        }
+
+        return [];
+
+    }
+
+
+    /*
+    ------------------------------------------------------------
+    Maximum 2 files
+    ------------------------------------------------------------
+    */
+
+    if (input.files.length > 2) {
+
+        input.value = "";
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML = "";
+            selectedContainer.style.display = "none";
+
+        }
+
+        showAttachmentError(
+            "You can upload a maximum of 2 files."
+        );
+
+        return [];
+
+    }
+
+
+    var files = Array.from(input.files);
+
+
+    /*
+    ------------------------------------------------------------
+    Validate every selected file
+    ------------------------------------------------------------
+    */
+
+    for (var i = 0; i < files.length; i++) {
+
+        var validation =
+            validateAttachmentFile(
+                files[i]
+            );
+
+
+        if (!validation.valid) {
+
+            input.value = "";
+
+            if (selectedContainer) {
+
+                selectedContainer.innerHTML = "";
+                selectedContainer.style.display = "none";
+
+            }
+
+            showAttachmentError(
+                files[i].name +
+                ": " +
+                validation.message
+            );
+
+            return [];
+
+        }
+
+    }
+
+
+    /*
+    ------------------------------------------------------------
+    Display selected files
+    ------------------------------------------------------------
+    */
+
+    if (selectedContainer) {
+
+        selectedContainer.innerHTML = "";
+
+
+        files.forEach(
+            function (file, index) {
+
+                var fileElement =
+                    document.createElement("div");
+
+                fileElement.className =
+                    "pass-attachment-selected";
+
+
+                fileElement.innerHTML = `
+
+                    <div class="pass-attachment-selected-icon">
+                        📎
+                    </div>
+
+                    <div class="pass-attachment-selected-details">
+
+                        <div class="pass-attachment-selected-name">
+                            ${escapeHtml(file.name)}
+                        </div>
+
+                        <div class="pass-attachment-selected-size">
+                            ${formatFileSize(file.size)}
+                        </div>
 
                     </div>
 
                 `;
 
-            }
 
-        }
-
-    }
-
-
-    /* ============================================================
-       APPLICATIONS: LOAD ITEMS
-       ============================================================ */
-
-    async function loadApplicationItems() {
-
-        setStatus(
-            "Loading NSV Applications..."
-        );
-
-
-        var url =
-
-            SITE_URL +
-
-            "/_api/web/lists/GetByTitle('" +
-
-            encodeURIComponent(
-                APPLICATIONS_LIST_TITLE
-            ) +
-
-            "')/items?$top=5000";
-
-
-        var result =
-            await apiGet(
-                url
-            );
-
-
-        allApplicationItems =
-            result.value || [];
-
-
-        applyApplicationsFilter();
-
-        renderApplicationsTable();
-
-        updatePanelDescription();
-
-
-        setStatus(
-            allApplicationItems.length +
-            " applications loaded successfully."
-        );
-
-    }
-
-
-    /* ============================================================
-       APPLICATIONS: FILTER
-       ============================================================ */
-
-    function applyApplicationsFilter() {
-
-        var searchInput =
-            byId(
-                "nsv-search"
-            );
-
-        var searchText =
-            searchInput
-                ? searchInput.value
-                    .toLowerCase()
-                    .trim()
-                : "";
-
-
-        filteredApplicationItems =
-            allApplicationItems.filter(
-                function (item) {
-
-                    return (
-                        !searchText ||
-                        itemMatchesSearch(
-                            item,
-                            searchText
-                        )
-                    );
-
-                }
-            );
-
-    }
-
-
-    /* ============================================================
-       APPLICATIONS: SORTING
-       ============================================================ */
-
-    function sortApplicationItems() {
-
-        if (!applicationSortState.field) {
-
-            return;
-
-        }
-
-
-        var column =
-            columns.find(
-                function (item) {
-
-                    return (
-                        item.field ===
-                        applicationSortState.field
-                    );
-
-                }
-            );
-
-
-        if (!column) {
-
-            return;
-
-        }
-
-
-        filteredApplicationItems.sort(
-            function (a, b) {
-
-                var valueA =
-                    getSortValue(
-                        a,
-                        column
-                    );
-
-
-                var valueB =
-                    getSortValue(
-                        b,
-                        column
-                    );
-
-
-                if (
-                    valueA === valueB
-                ) {
-
-                    return 0;
-
-                }
-
-
-                var result =
-                    valueA <
-                    valueB
-                        ? -1
-                        : 1;
-
-
-                return (
-                    applicationSortState.direction === "asc"
-                        ? result
-                        : -result
+                selectedContainer.appendChild(
+                    fileElement
                 );
 
             }
         );
 
+
+        /*
+        --------------------------------------------------------
+        Add one remove button for all selected files
+        --------------------------------------------------------
+        */
+
+        var removeButton =
+            document.createElement("button");
+
+        removeButton.type = "button";
+        removeButton.className =
+            "pass-attachment-remove";
+        removeButton.title =
+            "Remove attachments";
+        removeButton.textContent = "×";
+
+
+        removeButton.addEventListener(
+            "click",
+            function () {
+
+                clearAttachment();
+
+            }
+        );
+
+
+        selectedContainer.appendChild(
+            removeButton
+        );
+
+
+        selectedContainer.style.display =
+            "flex";
+
     }
 
 
-    function handleApplicationColumnSort(
-        field
-    ) {
+    return files;
 
-        if (
-            applicationSortState.field === field
-        ) {
-
-            applicationSortState.direction =
-                applicationSortState.direction === "asc"
-                    ? "desc"
-                    : "asc";
-
-        }
-        else {
-
-            applicationSortState.field =
-                field;
-
-            applicationSortState.direction =
-                "asc";
-
-        }
+}
 
 
-        sortApplicationItems();
+    function clearAttachment() {
 
-        renderApplicationsTable();
-
-        updatePanelDescription();
-
-    }
-
-
-    /* ============================================================
-       APPLICATIONS: RENDER TABLE
-       ============================================================ */
-
-    function renderApplicationsTable() {
-
-        var tableContainer =
-            byId(
-                "nsv-table-container"
+        var input =
+            document.getElementById(
+                "formAttachment"
             );
 
 
+        var selectedContainer =
+            document.getElementById(
+                "passAttachmentSelected"
+            );
+
+
+        var uploadingContainer =
+            document.getElementById(
+                "passAttachmentUploading"
+            );
+
+
+        if (input) {
+
+            input.value =
+                "";
+
+        }
+
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML =
+                "";
+
+            selectedContainer.style.display =
+                "none";
+
+        }
+
+
+        if (uploadingContainer) {
+
+            uploadingContainer.style.display =
+                "none";
+
+        }
+
+
+        showAttachmentError("");
+
+    }
+
+
+    /*
+    ============================================================
+    PDF ATTACHMENT HELPERS
+    ============================================================
+
+    Mirrors validateAndDisplayAttachment / clearAttachment above,
+    but targets the dedicated PDF file input and its own
+    error / selected-file / uploading containers so the two
+    upload widgets do not interfere with each other.
+    ============================================================
+    */
+
+    function showPdfAttachmentError(message) {
+
+        var errorContainer =
+            document.getElementById(
+                "passAttachmentPdfError"
+            );
+
+
+        if (!errorContainer) {
+
+            return;
+
+        }
+
+
+        errorContainer.textContent =
+            message ||
+            "";
+
+
+        errorContainer.style.display =
+            message
+                ? "block"
+                : "none";
+
+    }
+
+
+    function validateAndDisplayPdfAttachment(input) {
+
+        var selectedContainer =
+            document.getElementById(
+                "passAttachmentPdfSelected"
+            );
+
+        showPdfAttachmentError("");
+
         if (
-            !filteredApplicationItems.length
+            !input ||
+            !input.files ||
+            input.files.length === 0
         ) {
 
-            tableContainer.innerHTML = `
+            if (selectedContainer) {
 
-                <div class="nsv-empty">
-                    No applications found.
+                selectedContainer.innerHTML = "";
+                selectedContainer.style.display = "none";
+
+            }
+
+            return [];
+
+        }
+
+
+        /*
+        ------------------------------------------------------------
+        Only one PDF may be attached via this input.
+        ------------------------------------------------------------
+        */
+
+        if (input.files.length > 1) {
+
+            input.value = "";
+
+            if (selectedContainer) {
+
+                selectedContainer.innerHTML = "";
+                selectedContainer.style.display = "none";
+
+            }
+
+            showPdfAttachmentError(
+                "You can upload a maximum of 1 PDF file."
+            );
+
+            return [];
+
+        }
+
+
+        var files = Array.from(input.files);
+
+
+        /*
+        ------------------------------------------------------------
+        Validate the selected file (size, type, extension).
+        ------------------------------------------------------------
+        */
+
+        for (var i = 0; i < files.length; i++) {
+
+            var validation =
+                validateAttachmentFile(
+                    files[i]
+                );
+
+
+            if (!validation.valid) {
+
+                input.value = "";
+
+                if (selectedContainer) {
+
+                    selectedContainer.innerHTML = "";
+                    selectedContainer.style.display = "none";
+
+                }
+
+                showPdfAttachmentError(
+                    files[i].name +
+                    ": " +
+                    validation.message
+                );
+
+                return [];
+
+            }
+
+        }
+
+
+        /*
+        ------------------------------------------------------------
+        Display the selected file
+        ------------------------------------------------------------
+        */
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML = "";
+
+
+            files.forEach(
+                function (file, index) {
+
+                    var fileElement =
+                        document.createElement("div");
+
+                    fileElement.className =
+                        "pass-attachment-selected";
+
+
+                    fileElement.innerHTML = `
+
+                        <div class="pass-attachment-selected-icon">
+                            📎
+                        </div>
+
+                        <div class="pass-attachment-selected-details">
+
+                            <div class="pass-attachment-selected-name">
+                                ${escapeHtml(file.name)}
+                            </div>
+
+                            <div class="pass-attachment-selected-size">
+                                ${formatFileSize(file.size)}
+                            </div>
+
+                        </div>
+
+                    `;
+
+
+                    selectedContainer.appendChild(
+                        fileElement
+                    );
+
+                }
+            );
+
+
+            var removeButton =
+                document.createElement("button");
+
+            removeButton.type = "button";
+            removeButton.className =
+                "pass-attachment-remove";
+            removeButton.title =
+                "Remove attachment";
+            removeButton.textContent = "×";
+
+
+            removeButton.addEventListener(
+                "click",
+                function () {
+
+                    clearPdfAttachment();
+
+                }
+            );
+
+
+            selectedContainer.appendChild(
+                removeButton
+            );
+
+
+            selectedContainer.style.display =
+                "flex";
+
+        }
+
+
+        return files;
+
+    }
+
+
+    function clearPdfAttachment() {
+
+        var input =
+            document.getElementById(
+                "formAttachmentPdf"
+            );
+
+
+        var selectedContainer =
+            document.getElementById(
+                "passAttachmentPdfSelected"
+            );
+
+
+        var uploadingContainer =
+            document.getElementById(
+                "passAttachmentPdfUploading"
+            );
+
+
+        if (input) {
+
+            input.value =
+                "";
+
+        }
+
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML =
+                "";
+
+            selectedContainer.style.display =
+                "none";
+
+        }
+
+
+        if (uploadingContainer) {
+
+            uploadingContainer.style.display =
+                "none";
+
+        }
+
+
+        showPdfAttachmentError("");
+
+    }
+
+
+    /*
+    ============================================================
+    SHAREPOINT ATTACHMENT FILENAME
+    ============================================================
+
+    SharePoint attachment URLs use an OData string inside
+    FileName='...'.
+
+    Apostrophes therefore need to be escaped.
+    ============================================================
+    */
+
+    function escapeSharePointAttachmentFileName(
+        fileName
+    ) {
+
+        var safeName =
+            String(
+                fileName || ""
+            );
+
+
+        /*
+        --------------------------------------------------------
+        Remove path information. A browser normally supplies
+        only the filename, but this makes the function safer.
+        --------------------------------------------------------
+        */
+
+        safeName =
+            safeName
+                .split("\\")
+                .pop()
+                .split("/")
+                .pop();
+
+
+        /*
+        --------------------------------------------------------
+        Keep the filename reasonably sized for SharePoint.
+        --------------------------------------------------------
+        */
+
+        if (
+            safeName.length >
+            180
+        ) {
+
+            var extension =
+                getAttachmentExtension(
+                    safeName
+                );
+
+
+            var baseName =
+                safeName.substring(
+                    0,
+                    safeName.length -
+                    extension.length
+                );
+
+
+            baseName =
+                baseName.substring(
+                    0,
+                    180 -
+                    extension.length
+                );
+
+
+            safeName =
+                baseName +
+                extension;
+
+        }
+
+
+        /*
+        --------------------------------------------------------
+        OData escaping for apostrophes.
+        --------------------------------------------------------
+        */
+
+        safeName =
+            safeName.replace(
+                /'/g,
+                "''"
+            );
+
+
+        return encodeURIComponent(
+            safeName
+        )
+        /*
+        --------------------------------------------------------
+        encodeURIComponent intentionally leaves some characters
+        alone. Encode apostrophes explicitly as well.
+        --------------------------------------------------------
+        */
+        .replace(
+            /'/g,
+            "%27"
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    UPLOAD ATTACHMENT TO SHAREPOINT ITEM
+    ============================================================
+    */
+
+    function uploadAttachmentToItem(
+        itemId,
+        file,
+        digest
+    ) {
+
+        if (!file) {
+
+            return Promise.resolve();
+
+        }
+
+
+        var validation =
+            validateAttachmentFile(
+                file
+            );
+
+
+        if (!validation.valid) {
+
+            return Promise.reject(
+                new Error(
+                    validation.message
+                )
+            );
+
+        }
+
+
+        var encodedFileName =
+            escapeSharePointAttachmentFileName(
+                file.name
+            );
+
+
+        var attachmentUrl =
+            LIST_API_URL +
+            "(" +
+            encodeURIComponent(
+                itemId
+            ) +
+            ")/AttachmentFiles/add(FileName='" +
+            encodedFileName +
+            "')";
+
+
+        console.log(
+            "Uploading SharePoint attachment:",
+            file.name,
+            "to item:",
+            itemId
+        );
+
+
+        return fetch(
+            attachmentUrl,
+            {
+                method: "POST",
+
+                credentials:
+                    "same-origin",
+
+                headers: {
+
+                    "Accept":
+                        "application/json;odata=verbose",
+
+                    "Content-Type":
+                        "application/octet-stream",
+
+                    "X-RequestDigest":
+                        digest
+
+                },
+
+                body:
+                    file
+
+            }
+        )
+        .then(
+            function (response) {
+
+                if (!response.ok) {
+
+                    return response.text()
+                        .then(
+                            function (text) {
+
+                                console.error(
+                                    "SharePoint attachment upload response:",
+                                    text
+                                );
+
+
+                                throw new Error(
+                                    "SharePoint returned HTTP " +
+                                    response.status +
+                                    " while uploading the attachment. " +
+                                    text
+                                );
+
+                            }
+                        );
+
+                }
+
+
+                return response.json();
+
+            }
+        )
+        .then(
+            function (result) {
+
+                console.log(
+                    "Attachment uploaded successfully.",
+                    result
+                );
+
+
+                return result;
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    POPULATE SITE DROPDOWN
+    ============================================================
+    */
+
+    function populateSiteDropdown() {
+
+        var siteSelect =
+            document.getElementById(
+                "formSite"
+            );
+
+
+        var siteStatus =
+            document.getElementById(
+                "passSiteStatus"
+            );
+
+
+        if (!siteSelect) {
+
+            return;
+
+        }
+
+
+        siteSelect.innerHTML = `
+
+            <option value="">
+                Select site
+            </option>
+
+        `;
+
+
+        availableSites.forEach(
+            function (site) {
+
+                var option =
+                    document.createElement(
+                        "option"
+                    );
+
+
+                option.value =
+                    site;
+
+
+                option.textContent =
+                    site;
+
+
+                siteSelect.appendChild(
+                    option
+                );
+
+            }
+        );
+
+
+        if (siteStatus) {
+
+            siteStatus.className =
+                "pass-site-loading";
+
+
+            siteStatus.textContent =
+                availableSites.length +
+                " site" +
+                (
+                    availableSites.length === 1
+                        ? ""
+                        : "s"
+                ) +
+                " available.";
+
+        }
+
+
+        updateAccessPermissionsDropdown(
+            true
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    GET REQUEST DIGEST
+    ============================================================
+    */
+
+    function getRequestDigest() {
+
+        return fetch(
+            SITE_URL +
+            "/_api/contextinfo",
+            {
+                method: "POST",
+
+                headers: {
+
+                    "Accept":
+                        "application/json;odata=verbose",
+
+                    "Content-Type":
+                        "application/json;odata=verbose"
+
+                },
+
+                credentials:
+                    "same-origin"
+
+            }
+        )
+        .then(
+            function (response) {
+
+                if (!response.ok) {
+
+                    throw new Error(
+                        "Unable to obtain SharePoint request digest. HTTP " +
+                        response.status
+                    );
+
+                }
+
+
+                return response.json();
+
+            }
+        )
+        .then(
+            function (json) {
+
+                return json
+                    .d
+                    .GetContextWebInformation
+                    .FormDigestValue;
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    SEARCH SHAREPOINT USERS
+    ============================================================
+    */
+
+    function searchPassHolders(searchText) {
+
+        var resultsContainer =
+            document.getElementById(
+                "passHolderResults"
+            );
+
+
+        if (!resultsContainer) {
+
+            return;
+
+        }
+
+
+        searchText =
+            searchText.trim();
+
+
+        if (searchText.length < 2) {
+
+            resultsContainer.innerHTML =
+                "";
+
+            resultsContainer.style.display =
+                "none";
+
+            return;
+
+        }
+
+
+        resultsContainer.innerHTML = `
+
+            <div class="pass-user-no-results">
+
+                Searching...
+
+            </div>
+
+        `;
+
+
+        resultsContainer.style.display =
+            "block";
+
+
+        var queryParams = {
+
+            __metadata: {
+
+                type:
+                    "SP.UI.ApplicationPages.ClientPeoplePickerQueryParameters"
+
+            },
+
+            AllowEmailAddresses: true,
+
+            AllowMultipleEntities: false,
+
+            AllUrlZones: false,
+
+            MaximumEntitySuggestions: 10,
+
+            PrincipalSource: 15,
+
+            PrincipalType: 1,
+
+            QueryString: searchText
+
+        };
+
+
+        getRequestDigest()
+
+        .then(
+            function (digest) {
+
+                return fetch(
+                    SITE_URL +
+                    "/_api/SP.UI.ApplicationPages.ClientPeoplePickerWebServiceInterface.clientPeoplePickerSearchUser",
+                    {
+                        method: "POST",
+
+                        credentials:
+                            "same-origin",
+
+                        headers: {
+
+                            "Accept":
+                                "application/json;odata=verbose",
+
+                            "Content-Type":
+                                "application/json;odata=verbose",
+
+                            "X-RequestDigest":
+                                digest
+
+                        },
+
+                        body:
+                            JSON.stringify(
+                                {
+                                    queryParams:
+                                        queryParams
+                                }
+                            )
+
+                    }
+                );
+
+            }
+        )
+        .then(
+            function (response) {
+
+                console.log(
+                    "People picker search HTTP status:",
+                    response.status
+                );
+
+
+                if (!response.ok) {
+
+                    return response.text()
+                        .then(
+                            function (text) {
+
+                                console.error(
+                                    "People picker search response:",
+                                    text
+                                );
+
+
+                                throw new Error(
+                                    "People picker search returned HTTP " +
+                                    response.status +
+                                    ". " +
+                                    text
+                                );
+
+                            }
+                        );
+
+                }
+
+
+                return response.json();
+
+            }
+        )
+        .then(
+            function (json) {
+
+                var raw =
+                    json &&
+                    json.d &&
+                    json.d.ClientPeoplePickerSearchUser;
+
+
+                var entities = [];
+
+
+                try {
+
+                    entities =
+                        JSON.parse(
+                            raw
+                        ) ||
+                        [];
+
+                }
+                catch (error) {
+
+                    console.error(
+                        "Unable to parse people picker response.",
+                        error,
+                        raw
+                    );
+
+                    entities = [];
+
+                }
+
+
+                console.log(
+                    "People picker results:",
+                    entities
+                );
+
+
+                renderPassHolderResults(
+                    entities
+                );
+
+            }
+        )
+        .catch(
+            function (error) {
+
+                console.error(
+                    "Pass holder search failed.",
+                    error
+                );
+
+
+                resultsContainer.innerHTML = `
+
+                    <div class="pass-user-search-error">
+
+                        Unable to search for users.
+
+                    </div>
+
+                `;
+
+
+                resultsContainer.style.display =
+                    "block";
+
+            }
+        );
+
+    }
+
+
+    /*
+    ============================================================
+    RENDER PASS HOLDER SEARCH RESULTS
+    ============================================================
+    */
+
+    function renderPassHolderResults(entities) {
+
+        var resultsContainer =
+            document.getElementById(
+                "passHolderResults"
+            );
+
+
+        if (!resultsContainer) {
+
+            return;
+
+        }
+
+
+        var users = (entities || [])
+
+            .map(
+                function (entity) {
+
+                    var entityData =
+                        entity.EntityData ||
+                        {};
+
+
+                    var email =
+                        entityData.Email ||
+                        "";
+
+
+                    if (
+                        !email &&
+                        entity.Key &&
+                        entity.Key.indexOf("@") !== -1
+                    ) {
+
+                        email =
+                            entity.Key;
+
+                    }
+
+
+                    return {
+
+                        displayName:
+                            entity.DisplayText ||
+                            entity.Description ||
+                            "",
+
+                        email:
+                            email,
+
+                        accountName:
+                            entity.Key ||
+                            ""
+
+                    };
+
+                }
+            )
+
+            .filter(
+                function (user) {
+
+                    return !!user.displayName;
+
+                }
+            );
+
+
+        if (users.length === 0) {
+
+            resultsContainer.innerHTML = `
+
+                <div class="pass-user-no-results">
+
+                    No matching users found.
+
                 </div>
 
             `;
 
+
+            resultsContainer.style.display =
+                "block";
+
+
             return;
 
         }
 
 
-        sortApplicationItems();
+        resultsContainer.innerHTML =
+            users
+                .map(
+                    function (user, index) {
 
+                        return `
 
-        var html = `
-
-            <table class="nsv-table">
-
-                <colgroup>
-
-        `;
-
-
-        columns.forEach(
-            function (column) {
-
-                var width =
-                    columnWidths[
-                        column.field
-                    ] ||
-                    getDefaultColumnWidth(
-                        column.field
-                    );
-
-
-                html += `
-
-                    <col
-                        data-column-field="${escapeHtml(
-                            column.field
-                        )}"
-                        style="width:${width}px;"
-                    >
-
-                `;
-
-            }
-        );
-
-
-        html += `
-
-                </colgroup>
-
-                <thead>
-
-                    <tr>
-
-        `;
-
-
-        columns.forEach(
-            function (column, index) {
-
-                var sortIndicator =
-                    "";
-
-
-                if (
-                    applicationSortState.field ===
-                    column.field
-                ) {
-
-                    sortIndicator =
-                        applicationSortState.direction === "asc"
-                            ? " ▲"
-                            : " ▼";
-
-                }
-
-
-                html += `
-
-                    <th
-                        data-column-index="${index}"
-                        data-column-field="${escapeHtml(
-                            column.field
-                        )}"
-                        class="nsv-sortable-header nsv-applications-sortable-header"
-                        title="Click to sort"
-                    >
-
-                        <div class="nsv-th-content">
-
-                            <span
-                                class="nsv-sort-label"
-                                data-sort-field="${escapeHtml(
-                                    column.field
-                                )}"
+                            <div
+                                class="pass-user-result"
+                                data-user-index="${index}"
                             >
-                                ${escapeHtml(
-                                    column.header
-                                )}${sortIndicator}
-                            </span>
 
-                            <span
-                                class="nsv-column-resizer"
-                                data-column-index="${index}"
-                                title="Drag to resize column"
-                            ></span>
+                                <div class="pass-user-result-icon">
 
-                        </div>
+                                    👤
 
-                    </th>
-
-                `;
-
-            }
-        );
+                                </div>
 
 
-        html += `
+                                <div class="pass-user-result-details">
 
-                    </tr>
+                                    <div class="pass-user-result-name">
 
-                </thead>
+                                        ${escapeHtml(
+                                            user.displayName
+                                        )}
 
-                <tbody>
-
-        `;
-
-
-        filteredApplicationItems.forEach(
-            function (item) {
-
-                html += `
-
-                    <tr
-                        class="nsv-row-clickable"
-                        data-item-id="${escapeHtml(
-                            item.ID
-                        )}"
-                    >
-
-                `;
+                                    </div>
 
 
-                columns.forEach(
-                    function (column) {
+                                    ${
+                                        user.email
 
-                        html += `
+                                        ?
 
-                            <td
-                                data-column-field="${escapeHtml(
-                                    column.field
-                                )}"
-                            >
-                                ${formatValue(
-                                    item[
-                                        column.field
-                                    ],
-                                    column.type
-                                )}
-                            </td>
+                                        `
+
+                                            <div class="pass-user-result-email">
+
+                                                ${escapeHtml(
+                                                    user.email
+                                                )}
+
+                                            </div>
+
+                                        `
+
+                                        :
+
+                                        ""
+
+                                    }
+
+                                </div>
+
+                            </div>
 
                         `;
 
                     }
-                );
+                )
+                .join("");
 
 
-                html += `
-
-                    </tr>
-
-                `;
-
-            }
-        );
+        resultsContainer.style.display =
+            "block";
 
 
-        html += `
-
-                </tbody>
-
-            </table>
-
-        `;
-
-
-        tableContainer.innerHTML =
-            html;
-
-
-        attachColumnResizeHandlers();
-
-        attachApplicationColumnSortHandlers();
-
-        attachApplicationRowClickHandlers();
-
-    }
-
-
-    /* ============================================================
-       APPLICATIONS: COLUMN SORT HANDLERS
-       ============================================================ */
-
-    function attachApplicationColumnSortHandlers() {
-
-        var headers =
-            document.querySelectorAll(
-                ".nsv-applications-sortable-header"
+        var resultElements =
+            resultsContainer.querySelectorAll(
+                ".pass-user-result"
             );
 
 
-        headers.forEach(
-            function (header) {
+        resultElements.forEach(
+            function (element) {
 
-                header.addEventListener(
+                element.addEventListener(
                     "click",
-                    function (event) {
+                    function () {
 
-                        if (
-                            event.target.classList.contains(
-                                "nsv-column-resizer"
-                            )
-                        ) {
-
-                            return;
-
-                        }
-
-
-                        var field =
-                            header.getAttribute(
-                                "data-column-field"
+                        var index =
+                            parseInt(
+                                this.getAttribute(
+                                    "data-user-index"
+                                ),
+                                10
                             );
 
 
-                        if (field) {
-
-                            handleApplicationColumnSort(
-                                field
-                            );
-
-                        }
-
-                    }
-                );
-
-            }
-        );
-
-    }
-
-
-    /* ============================================================
-       APPLICATIONS: ROW CLICK
-       ============================================================ */
-
-    function attachApplicationRowClickHandlers() {
-
-        var rows =
-            document.querySelectorAll(
-                ".nsv-table tbody tr"
-            );
-
-
-        rows.forEach(
-            function (row) {
-
-                row.addEventListener(
-                    "click",
-                    function (event) {
-
-                        if (
-                            event.target.classList.contains(
-                                "nsv-column-resizer"
-                            )
-                        ) {
-
-                            return;
-
-                        }
-
-
-                        var itemId =
-                            Number(
-                                row.getAttribute(
-                                    "data-item-id"
-                                )
-                            );
-
-
-                        var item =
-                            allApplicationItems.find(
-                                function (record) {
-
-                                    return Number(
-                                        record.ID
-                                    ) ===
-                                    itemId;
-
-                                }
-                            );
-
-
-                        if (!item) {
-
-                            return;
-
-                        }
-
-
-                        selectedApplicationItem =
-                            item;
-
-
-                        openApplicationModal(
-                            item
+                        selectPassHolder(
+                            users[index]
                         );
 
                     }
@@ -6920,295 +5757,2574 @@ byId("nsv-applications").addEventListener(
     }
 
 
-    /* ============================================================
-       APPLICATIONS: TOGGLE MODE
-       ============================================================ */
+    /*
+    ============================================================
+    SELECT PASS HOLDER
+    ============================================================
+    */
 
-    function exitApplicationsModeIfActive() {
+    function selectPassHolder(user) {
 
-        if (!applicationsMode) {
+        selectedPassHolder =
+            user;
+
+
+        var hiddenField =
+            document.getElementById(
+                "formPassHolder"
+            );
+
+
+        var searchInput =
+            document.getElementById(
+                "formPassHolderSearch"
+            );
+
+
+        var resultsContainer =
+            document.getElementById(
+                "passHolderResults"
+            );
+
+
+        var selectedContainer =
+            document.getElementById(
+                "passHolderSelected"
+            );
+
+
+        if (hiddenField) {
+
+            hiddenField.value =
+                user.email;
+
+        }
+
+
+        if (searchInput) {
+
+            searchInput.value =
+                "";
+
+            searchInput.style.display =
+                "none";
+
+        }
+
+
+        if (resultsContainer) {
+
+            resultsContainer.innerHTML =
+                "";
+
+            resultsContainer.style.display =
+                "none";
+
+        }
+
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML = `
+
+                <div class="pass-selected-user">
+
+                    <div class="pass-selected-user-icon">
+
+                        👤
+
+                    </div>
+
+
+                    <div class="pass-selected-user-details">
+
+                        <div class="pass-selected-user-name">
+
+                            ${escapeHtml(
+                                user.displayName
+                            )}
+
+                        </div>
+
+
+                        ${
+                            user.email
+
+                            ?
+
+                            `
+
+                                <div class="pass-selected-user-email">
+
+                                    ${escapeHtml(
+                                        user.email
+                                    )}
+
+                                </div>
+
+                            `
+
+                            :
+
+                            ""
+
+                        }
+
+                    </div>
+
+
+                    <button
+                        type="button"
+                        class="pass-selected-user-remove"
+                        id="removePassHolder"
+                        title="Remove selected user"
+                    >
+
+                        ×
+
+                    </button>
+
+                </div>
+
+            `;
+
+
+            selectedContainer.style.display =
+                "block";
+
+
+            document
+                .getElementById(
+                    "removePassHolder"
+                )
+                .addEventListener(
+                    "click",
+                    function () {
+
+                        clearPassHolder();
+
+                    }
+                );
+
+        }
+
+    }
+
+
+    /*
+    ============================================================
+    CLEAR SELECTED PASS HOLDER
+    ============================================================
+    */
+
+    function clearPassHolder() {
+
+        selectedPassHolder =
+            null;
+
+
+        var searchInput =
+            document.getElementById(
+                "formPassHolderSearch"
+            );
+
+
+        var resultsContainer =
+            document.getElementById(
+                "passHolderResults"
+            );
+
+
+        var selectedContainer =
+            document.getElementById(
+                "passHolderSelected"
+            );
+
+
+        var hiddenField =
+            document.getElementById(
+                "formPassHolder"
+            );
+
+
+        if (hiddenField) {
+
+            hiddenField.value =
+                "";
+
+        }
+
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML =
+                "";
+
+            selectedContainer.style.display =
+                "none";
+
+        }
+
+
+        if (resultsContainer) {
+
+            resultsContainer.innerHTML =
+                "";
+
+            resultsContainer.style.display =
+                "none";
+
+        }
+
+
+        if (searchInput) {
+
+            searchInput.value =
+                "";
+
+            searchInput.style.display =
+                "block";
+
+            searchInput.focus();
+
+        }
+
+    }
+
+
+    /*
+    ============================================================
+    SUBMIT PASS REQUEST
+    ============================================================
+    */
+
+    function submitPassRequest() {
+
+        var submitButton =
+            document.getElementById(
+                "passFormSubmit"
+            );
+
+
+        var message =
+            document.getElementById(
+                "passFormMessage"
+            );
+
+
+        var passHolder =
+            document.getElementById(
+                "formPassHolder"
+            )
+            .value;
+
+
+        var NI =
+            document.getElementById(
+                "formNationalInsurance"
+            )
+            .value;
+
+
+        var site =
+            document.getElementById(
+                "formSite"
+            )
+            .value;
+
+
+        var clearance =
+            document.getElementById(
+                "formClearance"
+            )
+            .value;
+
+
+        var requiredDate =
+            document.getElementById(
+                "formRequiredDate"
+            )
+            .value;
+
+
+        var expiryDate =
+            document.getElementById(
+                "formExpiryDate"
+            )
+            .value;
+
+
+        var requester =
+            document.getElementById(
+                "formPassRequester"
+            )
+            .value
+            .trim();
+
+
+        var selectedAccess =
+            getSelectedAccessPermissions();
+
+
+        var access =
+            selectedAccess.join(", ");
+
+
+        var justification =
+            document.getElementById(
+                "formJustification"
+            )
+            .value
+            .trim();
+
+
+/*
+--------------------------------------------------------
+GET ATTACHMENTS
+--------------------------------------------------------
+*/
+
+var attachmentInput =
+    document.getElementById(
+        "formAttachment"
+    );
+
+
+var attachmentPdfInput =
+    document.getElementById(
+        "formAttachmentPdf"
+    );
+
+
+var attachmentFiles =
+    [];
+
+
+if (
+    attachmentInput &&
+    attachmentInput.files &&
+    attachmentInput.files.length > 0
+) {
+
+    attachmentFiles =
+        attachmentFiles.concat(
+            Array.from(
+                attachmentInput.files
+            )
+        );
+
+}
+
+
+/*
+--------------------------------------------------------
+Add any file selected via the dedicated PDF input so
+that BOTH the image and the PDF are uploaded to the
+same SharePoint item's Attachments column.
+--------------------------------------------------------
+*/
+
+if (
+    attachmentPdfInput &&
+    attachmentPdfInput.files &&
+    attachmentPdfInput.files.length > 0
+) {
+
+    attachmentFiles =
+        attachmentFiles.concat(
+            Array.from(
+                attachmentPdfInput.files
+            )
+        );
+
+}
+
+
+/*
+--------------------------------------------------------
+VALIDATE ATTACHMENTS
+--------------------------------------------------------
+*/
+
+/*
+--------------------------------------------------------
+Maximum 2 files (1 image + 1 PDF)
+--------------------------------------------------------
+*/
+
+if (
+    attachmentFiles.length > 2
+) {
+
+    message.className =
+        "pass-form-message " +
+        "pass-form-message-error";
+
+    message.innerHTML =
+        "You can upload a maximum of 2 files.";
+
+    return;
+
+}
+
+/*
+--------------------------------------------------------
+Validate every attachment
+--------------------------------------------------------
+*/
+
+for (
+    var i = 0;
+    i < attachmentFiles.length;
+    i++
+) {
+
+    var attachmentValidation =
+        validateAttachmentFile(
+            attachmentFiles[i]
+        );
+
+
+if (
+    !attachmentValidation.valid
+) {
+
+    message.className =
+        "pass-form-message " +
+        "pass-form-message-error";
+
+    message.innerHTML =
+        escapeHtml(
+            attachmentFiles[i].name +
+            ": " +
+            attachmentValidation.message
+        );
+
+    return;
+
+}
+
+}
+
+
+        /*
+        --------------------------------------------------------
+        VALIDATE REQUIRED FORM FIELDS
+        --------------------------------------------------------
+        */
+
+        if (
+            !selectedPassHolder ||
+            !passHolder ||
+            !site ||
+            !clearance ||
+            !requiredDate ||
+            selectedAccess.length === 0 ||
+            !justification
+        ) {
+
+            message.className =
+                "pass-form-message " +
+                "pass-form-message-error";
+
+
+            message.innerHTML =
+                "Please complete all required fields and select at least one Access Permission.";
+
 
             return;
 
         }
 
 
-        applicationsMode =
-            false;
+        submitButton.disabled =
+            true;
 
 
-        var button =
-            byId(
-                "nsv-applications"
+        submitButton.textContent =
+            "Submitting...";
+
+
+        message.className =
+            "pass-form-message";
+
+
+        message.innerHTML =
+            "";
+
+
+        var uploadingContainer =
+            document.getElementById(
+                "passAttachmentUploading"
             );
 
 
-        if (button) {
-
-            button.classList.remove(
-                "nsv-update-active"
+        var uploadingPdfContainer =
+            document.getElementById(
+                "passAttachmentPdfUploading"
             );
 
-            button.setAttribute(
-                "aria-pressed",
-                "false"
-            );
+
+        if (uploadingContainer) {
+
+            uploadingContainer.style.display =
+                "none";
 
         }
 
-    }
+
+        if (uploadingPdfContainer) {
+
+            uploadingPdfContainer.style.display =
+                "none";
+
+        }
 
 
-    function toggleApplicationsMode() {
+        var item = {
 
-        applicationsMode = !applicationsMode;
+            "__metadata": {
+
+                "type":
+                    LIST_ITEM_TYPE
+
+            },
+
+            Pass_Holder:
+                passHolder,
+
+            NI:
+                NI,
+
+            Site:
+                site,
+
+            Clearance_Level:
+                clearance,
+
+            Required_Date:
+                requiredDate,
+
+            Access:
+                access,
+
+            Justification:
+                justification
+
+        };
 
 
-        var button =
-            byId("nsv-applications");
+        if (expiryDate) {
 
-        var dashboardsButton =
-            byId("nsv-dashboards");
+            item.Expiry_Date =
+                expiryDate;
 
-        var searchInput =
-            byId("nsv-search");
+        }
 
 
-        if (applicationsMode) {
+        if (requester) {
 
-            /*
-             * Dashboards, Records and Applications are mutually
-             * exclusive views. Turning Applications on always
-             * turns Dashboards off.
-             */
-            if (dashboardMode) {
+            item.Pass_Requester =
+                requester;
 
-                dashboardMode = false;
+        }
 
-                if (dashboardsButton) {
 
-                    dashboardsButton.classList.remove(
-                        "nsv-update-active"
-                    );
+        /*
+        --------------------------------------------------------
+        GET REQUEST DIGEST ONCE.
+        --------------------------------------------------------
 
-                    dashboardsButton.setAttribute(
-                        "aria-pressed",
-                        "false"
+        The same digest is then used for:
+
+        1. Creating the SharePoint list item.
+        2. Uploading the attachment.
+
+        --------------------------------------------------------
+        */
+
+        getRequestDigest()
+
+        .then(
+            function (digest) {
+
+                return fetch(
+                    LIST_API_URL,
+                    {
+                        method: "POST",
+
+                        credentials:
+                            "same-origin",
+
+                        headers: {
+
+                            "Accept":
+                                "application/json;odata=verbose",
+
+                            "Content-Type":
+                                "application/json;odata=verbose",
+
+                            "X-RequestDigest":
+                                digest
+
+                        },
+
+                        body:
+                            JSON.stringify(
+                                item
+                            )
+
+                    }
+                )
+                .then(
+                    function (response) {
+
+                        if (!response.ok) {
+
+                            return response.text()
+                                .then(
+                                    function (text) {
+
+                                        throw new Error(
+                                            "SharePoint returned HTTP " +
+                                            response.status +
+                                            ". " +
+                                            text
+                                        );
+
+                                    }
+                                );
+
+                        }
+
+
+                        return response.json();
+
+                    }
+                )
+                .then(
+                    function (result) {
+
+                        /*
+                        ------------------------------------------------
+                        SHAREPOINT RETURNS THE NEW ITEM IN result.d
+                        ------------------------------------------------
+                        */
+
+                        var createdItem =
+                            result &&
+                            result.d
+                                ? result.d
+                                : null;
+
+
+                        var itemId =
+                            createdItem &&
+                            createdItem.ID
+                                ? createdItem.ID
+                                : null;
+
+
+                        if (!itemId) {
+
+                            throw new Error(
+                                "The request was created, but SharePoint did not return the new item ID. The attachment could not be uploaded."
+                            );
+
+                        }
+
+
+                        console.log(
+                            "Pass request successfully created. Item ID:",
+                            itemId
+                        );
+
+/*
+------------------------------------------------
+IF THERE ARE NO ATTACHMENTS, WE ARE FINISHED.
+------------------------------------------------
+*/
+
+if (
+    attachmentFiles.length === 0
+) {
+
+    return {
+
+        itemId:
+            itemId,
+
+        attachmentUploaded:
+            false,
+
+        attachmentCount:
+            0
+
+    };
+
+}
+
+
+/*
+------------------------------------------------
+SHOW UPLOAD STATUS
+------------------------------------------------
+*/
+
+if (uploadingContainer) {
+
+    uploadingContainer.style.display =
+        "block";
+
+    uploadingContainer.textContent =
+        "Uploading attachments...";
+
+}
+
+
+if (uploadingPdfContainer) {
+
+    uploadingPdfContainer.style.display =
+        "block";
+
+    uploadingPdfContainer.textContent =
+        "Uploading attachments...";
+
+}
+
+
+submitButton.textContent =
+    "Uploading attachments...";
+
+
+/*
+------------------------------------------------
+UPLOAD ALL FILES TO THE NEW ITEM'S ATTACHMENTS
+------------------------------------------------
+*/
+
+return attachmentFiles
+    .reduce(
+        function (promise, file, index) {
+
+            return promise.then(
+                function () {
+
+                    if (uploadingContainer) {
+
+                        uploadingContainer.textContent =
+                            "Uploading attachment " +
+                            (index + 1) +
+                            " of " +
+                            attachmentFiles.length +
+                            "...";
+
+                    }
+
+
+                    if (uploadingPdfContainer) {
+
+                        uploadingPdfContainer.textContent =
+                            "Uploading attachment " +
+                            (index + 1) +
+                            " of " +
+                            attachmentFiles.length +
+                            "...";
+
+                    }
+
+
+                    return uploadAttachmentToItem(
+                        itemId,
+                        file,
+                        digest
                     );
 
                 }
+            );
+
+        },
+        Promise.resolve()
+    )
+    .then(
+        function () {
+
+            if (uploadingContainer) {
+
+                uploadingContainer.textContent =
+                    attachmentFiles.length +
+                    " attachment" +
+                    (
+                        attachmentFiles.length === 1
+                            ? ""
+                            : "s"
+                    ) +
+                    " uploaded successfully.";
 
             }
 
 
+            if (uploadingPdfContainer) {
+
+                uploadingPdfContainer.textContent =
+                    attachmentFiles.length +
+                    " attachment" +
+                    (
+                        attachmentFiles.length === 1
+                            ? ""
+                            : "s"
+                    ) +
+                    " uploaded successfully.";
+
+            }
+
+
+            return {
+
+                itemId:
+                    itemId,
+
+                attachmentUploaded:
+                    true,
+
+                attachmentCount:
+                    attachmentFiles.length
+
+            };
+
+        }
+    )
+    .catch(
+        function (attachmentError) {
+
             /*
-             * Update mode is a Records-table concept (editable
-             * rows). It has no meaning on the Applications
-             * table, so switch it off if it was left on.
-             */
-            if (updateMode) {
+            ------------------------------------------------
+            IMPORTANT:
+            The list item has already been created.
 
-                updateMode = false;
+            Therefore we report the attachment error
+            separately rather than pretending that the
+            entire request failed.
+            ------------------------------------------------
+            */
+
+            throw new Error(
+                "The pass request was created successfully as SharePoint item #" +
+                itemId +
+                ", but one or more attachments could not be uploaded. " +
+                attachmentError.message
+            );
+
+        }
+    );
+
+                    }
+                );
+
+            }
+        )
+
+        .then(
+            function (result) {
+
+                console.log(
+                    "Pass request successfully submitted.",
+                    result
+                );
 
 
-                var updateButton =
-                    byId(
-                        "nsv-update-clearance"
-                    );
-
-                var updateHint =
-                    byId(
-                        "nsv-update-hint"
-                    );
+                message.className =
+                    "pass-form-message " +
+                    "pass-form-message-success";
 
 
-                if (updateButton) {
+if (
+    result &&
+    result.attachmentUploaded
+) {
 
-                    updateButton.classList.remove(
-                        "nsv-update-active"
-                    );
+    var attachmentCount =
+        result.attachmentCount || 0;
 
-                    updateButton.setAttribute(
-                        "aria-pressed",
-                        "false"
-                    );
+    message.innerHTML =
+        "<strong>Request submitted successfully.</strong>" +
+        "<br>" +
+        "The Building Pass Request has been added to the register and " +
+        attachmentCount +
+        " attachment" +
+        (
+            attachmentCount === 1
+                ? ""
+                : "s"
+        ) +
+        " uploaded successfully.";
+
+}
+                else {
+
+                    message.innerHTML =
+                        "<strong>Request submitted successfully.</strong>" +
+                        "<br>" +
+                        "The Building Pass Request has been added to the register.";
 
                 }
 
 
-                if (updateHint) {
+                document
+                    .getElementById(
+                        "passSubmissionForm"
+                    )
+                    .reset();
 
-                    updateHint.style.display =
+
+                clearPassHolder();
+
+
+                clearAttachment();
+
+
+                clearPdfAttachment();
+
+
+                var requesterField =
+                    document.getElementById(
+                        "formPassRequester"
+                    );
+
+
+                if (requesterField) {
+
+                    requesterField.value =
+                        currentUserEmail ||
+                        currentUserDisplayName ||
+                        "";
+
+                }
+
+
+                /*
+                ------------------------------------------------
+                RESET ACCESS DROPDOWN
+                ------------------------------------------------
+                */
+
+                updateAccessPermissionsDropdown(
+                    true
+                );
+
+
+                submitButton.disabled =
+                    false;
+
+
+                submitButton.textContent =
+                    "Submit Request";
+
+
+                loadData();
+
+            }
+        )
+
+        .catch(
+            function (error) {
+
+                console.error(
+                    "Pass request submission failed.",
+                    error
+                );
+
+
+                message.className =
+                    "pass-form-message " +
+                    "pass-form-message-error";
+
+
+                message.innerHTML =
+                    "<strong>Unable to complete the request.</strong>" +
+                    "<br>" +
+                    escapeHtml(
+                        error.message
+                    );
+
+
+                submitButton.disabled =
+                    false;
+
+
+                submitButton.textContent =
+                    "Submit Request";
+
+
+                if (uploadingContainer) {
+
+                    uploadingContainer.style.display =
+                        "none";
+
+                }
+
+
+                if (uploadingPdfContainer) {
+
+                    uploadingPdfContainer.style.display =
                         "none";
 
                 }
 
             }
+        );
 
-            button.classList.add("nsv-update-active");
-            button.setAttribute("aria-pressed", "true");
+    }
 
-            if (searchInput) {
-                searchInput.disabled = false;
-            }
 
-            loadApplicationItems().catch(
-                function (error) {
+    /*
+    ============================================================
+    NAVIGATION
+    ============================================================
+    */
 
-                    console.error(
-                        "NSV Applications load error:",
-                        error
-                    );
+    function bindNavigation() {
 
-                    setStatus(
-                        "ERROR: " +
-                        error.message
-                    );
+        var homeButton =
+            document.getElementById(
+                "passHomeButton"
+            );
+
+
+        var submitButton =
+            document.getElementById(
+                "passSubmitButton"
+            );
+
+
+        var dashboardButton =
+            document.getElementById(
+                "passDashboardButton"
+            );
+
+
+        var adminDashboardButton =
+            document.getElementById(
+                "passAdminDashboardButton"
+            );
+
+
+        if (homeButton) {
+
+            homeButton.addEventListener(
+                "click",
+                function () {
+
+                    currentView =
+                        "home";
+
+                    renderHome();
 
                 }
             );
 
         }
-        else {
 
-            button.classList.remove("nsv-update-active");
-            button.setAttribute("aria-pressed", "false");
 
-            if (searchInput) {
-                searchInput.disabled = false;
-            }
+        if (submitButton) {
 
-            renderTable();
+            submitButton.addEventListener(
+                "click",
+                function () {
 
-            updatePanelDescription();
+                    currentView =
+                        "submit";
 
-            setStatus("Viewing table.");
+                    renderSubmissionForm();
+
+                }
+            );
+
+        }
+
+
+        if (dashboardButton) {
+
+            dashboardButton.addEventListener(
+                "click",
+                function () {
+
+                    currentView =
+                        "dashboard";
+
+                    prepareUserDashboard();
+
+                }
+            );
+
+        }
+
+
+        if (adminDashboardButton) {
+
+            adminDashboardButton.addEventListener(
+                "click",
+                function () {
+
+                    if (!isAdmin) {
+
+                        return;
+
+                    }
+
+
+                    currentView =
+                        "admin";
+
+                    prepareAdminDashboard();
+
+                }
+            );
 
         }
 
     }
 
 
-    /* ============================================================
-       APPLICATIONS: MODAL
-       ============================================================ */
+    /*
+    ============================================================
+    PREPARE USER DASHBOARD
+    ============================================================
+    */
 
-    function openApplicationModal(
-        item
-    ) {
+    function prepareUserDashboard() {
 
-        closeModal();
+        /*
+        --------------------------------------------------------
+        SECURITY
+        --------------------------------------------------------
+
+        SharePoint item-level permissions determine which
+        records were returned by the REST API.
+
+        Therefore we do NOT filter the records here by
+        Pass_Requester.
+
+        --------------------------------------------------------
+        */
+
+        data =
+            allData.slice();
 
 
-        var fieldsHtml =
-            "";
+        currentSite =
+            "ALL";
 
 
-        TABLE_COLUMNS.forEach(
-            function (column) {
+        currentStatus =
+            "ALL";
 
-                fieldsHtml +=
-                    buildReadOnlyField(
-                        column,
-                        formatModalValue(
-                            item[
-                                column.field
-                            ],
-                            column.type
-                        )
+
+        renderDashboard(false);
+
+    }
+
+
+    /*
+    ============================================================
+    PREPARE ADMIN DASHBOARD
+    ============================================================
+    */
+
+    function prepareAdminDashboard() {
+
+        if (!isAdmin) {
+
+            currentView =
+                "home";
+
+            renderHome();
+
+            return;
+
+        }
+
+
+        data =
+            allData.slice();
+
+
+        currentSite =
+            "ALL";
+
+        currentStatus =
+            "ALL";
+
+        renderDashboard(true);
+
+    }
+
+
+    /*
+    ============================================================
+    RENDER DASHBOARD
+    ============================================================
+    */
+
+    function renderDashboard(adminMode) {
+
+        currentView =
+            adminMode
+                ? "admin"
+                : "dashboard";
+
+
+        var counts =
+            getCounts();
+
+
+        var filtered =
+            getFilteredData();
+
+
+        var sites =
+            getSites();
+
+
+        dashboard.innerHTML = `
+
+            ${renderNavigation()}
+
+
+            <div class="dashboard-header">
+
+                <h1>
+
+                    ${
+                        adminMode
+                            ? "Admin Dashboard"
+                            : "Building Pass Request Dashboard"
+                    }
+
+                </h1>
+
+
+                <p>
+
+                    ${
+                        adminMode
+                            ? "All Building Pass Request"
+                            : "Your Building Pass Request"
+                    }
+
+                </p>
+
+            </div>
+
+
+            ${
+                adminMode
+                    ? `
+                        <div class="admin-banner">
+                            Administrator view — all pass requests
+                            are visible to authorised administrators.
+                        </div>
+                      `
+                    : `
+                        <div class="admin-banner">
+                            Standard User - You will see all pass requests
+                            where you are the pass requester.
+                        </div>
+                      `
+            }
+
+
+            <div class="summary-grid">
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        Total Passes
+                    </div>
+
+                    <div class="summary-number number-blue">
+                        ${data.length}
+                    </div>
+
+                </div>
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        Issued
+                    </div>
+
+                    <div class="summary-number number-green">
+                        ${counts.issued}
+                    </div>
+
+                </div>
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        Pending
+                    </div>
+
+                    <div class="summary-number number-amber">
+                        ${counts.pending}
+                    </div>
+
+                </div>
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        Rejected
+                    </div>
+
+                    <div class="summary-number number-red">
+                        ${counts.rejected}
+                    </div>
+
+                </div>
+
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        Expired
+                    </div>
+
+                    <div class="summary-number number-red">
+                        ${counts.expired}
+                    </div>
+
+                </div>
+
+
+            </div>
+
+
+            <div class="controls">
+
+
+                <input
+                    type="text"
+                    id="passSearch"
+                    class="search-box"
+                    placeholder="Search ID, pass holder, site, clearance or requester..."
+                    value="${escapeHtml(currentSearch)}"
+                    autocomplete="off"
+                >
+
+
+                <select
+                    id="passSite"
+                    class="filter-select"
+                >
+
+                    <option value="ALL">
+                        All Sites
+                    </option>
+
+                    ${sites.map(
+                        function (site) {
+
+                            return `
+
+                                <option
+                                    value="${escapeHtml(site)}"
+                                    ${
+                                        currentSite === site
+                                            ? "selected"
+                                            : ""
+                                    }
+                                >
+                                    ${escapeHtml(site)}
+                                </option>
+
+                            `;
+
+                        }
+                    ).join("")}
+
+                </select>
+
+
+                <select
+                    id="passStatus"
+                    class="filter-select"
+                >
+
+                    <option value="ALL">
+                        All Statuses
+                    </option>
+
+
+                    <option
+                        value="Issued"
+                        ${
+                            currentStatus === "Issued"
+                                ? "selected"
+                                : ""
+                        }
+                    >
+                        Issued
+                    </option>
+
+
+                    <option
+                        value="Pending"
+                        ${
+                            currentStatus === "Pending"
+                                ? "selected"
+                                : ""
+                        }
+                    >
+                        Pending
+                    </option>
+
+
+                    <option
+                        value="Rejected"
+                        ${
+                            currentStatus === "Rejected"
+                                ? "selected"
+                                : ""
+                        }
+                    >
+                        Rejected
+                    </option>
+
+                </select>
+
+
+                <div
+                    class="record-count"
+                    id="passRecordCount"
+                >
+
+                    ${filtered.length}
+                    of
+                    ${data.length}
+                    records
+
+                </div>
+
+
+            </div>
+
+
+            <div
+                class="table-container"
+                id="passTableContainer"
+            >
+
+                ${renderTable(filtered, adminMode)}
+
+            </div>
+
+        `;
+
+
+        var searchInput =
+            document.getElementById(
+                "passSearch"
+            );
+
+
+        if (searchInput) {
+
+            searchInput.addEventListener(
+                "input",
+                function () {
+
+                    currentSearch =
+                        this.value;
+
+
+                    updateDashboardResults(
+                        adminMode
                     );
 
-            }
+                }
+            );
+
+        }
+
+
+        var siteSelect =
+            document.getElementById(
+                "passSite"
+            );
+
+
+        if (siteSelect) {
+
+            siteSelect.addEventListener(
+                "change",
+                function () {
+
+                    currentSite =
+                        this.value;
+
+
+                    updateDashboardResults(
+                        adminMode
+                    );
+
+                }
+            );
+
+        }
+
+
+        var statusSelect =
+            document.getElementById(
+                "passStatus"
+            );
+
+
+        if (statusSelect) {
+
+            statusSelect.addEventListener(
+                "change",
+                function () {
+
+                    currentStatus =
+                        this.value;
+
+
+                    updateDashboardResults(
+                        adminMode
+                    );
+
+                }
+            );
+
+        }
+
+
+        bindTableRows();
+
+        bindNavigation();
+
+    }
+
+
+    /*
+    ============================================================
+    UPDATE DASHBOARD RESULTS
+    ============================================================
+    */
+
+    function updateDashboardResults(adminMode) {
+
+        var filtered =
+            getFilteredData();
+
+
+        var tableContainer =
+            document.getElementById(
+                "passTableContainer"
+            );
+
+
+        var recordCount =
+            document.getElementById(
+                "passRecordCount"
+            );
+
+
+        if (recordCount) {
+
+            recordCount.textContent =
+                filtered.length +
+                " of " +
+                data.length +
+                " records";
+
+        }
+
+
+        if (tableContainer) {
+
+            tableContainer.innerHTML =
+                renderTable(
+                    filtered,
+                    adminMode
+                );
+
+        }
+
+
+        bindTableRows();
+
+    }
+
+
+    /*
+    ============================================================
+    RENDER TABLE
+    ============================================================
+    */
+
+    function renderTable(
+        filtered,
+        adminMode
+    ) {
+
+        if (filtered.length === 0) {
+
+            return `
+
+                <div class="empty-state">
+
+                    No records match your
+                    search or filters.
+
+                </div>
+
+            `;
+
+        }
+
+
+        return `
+
+            <table class="pass-table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>ID</th>
+
+                        <th>Pass Holder</th>
+
+                        ${
+                            adminMode
+                                ? "<th>Requester</th>"
+                                : ""
+                        }
+
+                        <th>Site</th>
+
+                        <th>Clearance</th>
+
+                        <th>Request Date</th>
+
+                        <th>Expiry</th>
+
+<th>Status</th>
+
+${
+    adminMode
+        ? "<th>Action</th>"
+        : ""
+}
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    ${filtered.map(
+                        function (record) {
+
+                            var status =
+                                getStatus(record);
+
+
+                            var expiry =
+                                getExpiry(record);
+
+
+                            return `
+
+                                <tr
+                                    data-record-id="${escapeHtml(record.ID)}"
+                                >
+
+                                    <td class="id-cell">
+                                        #${escapeHtml(record.ID)}
+                                    </td>
+
+
+                                    <td class="holder-cell">
+                                        ${escapeHtml(record.Pass_Holder)}
+                                    </td>
+
+
+                                    ${
+                                        adminMode
+                                        ?
+                                        `
+                                            <td>
+                                                ${escapeHtml(record.Pass_Requester)}
+                                            </td>
+                                        `
+                                        :
+                                        ""
+                                    }
+
+
+                                    <td>
+                                        ${escapeHtml(record.Site)}
+                                    </td>
+
+
+                                    <td>
+                                        ${escapeHtml(record.Clearance_Level)}
+                                    </td>
+
+
+                                    <td>
+                                        ${formatDate(record.RequestDate)}
+                                    </td>
+
+
+<td>
+
+    ${formatDate(record.Expiry_Date)}
+
+    <div class="${expiry.className}">
+        ${escapeHtml(expiry.label)}
+    </div>
+
+</td>
+
+
+<td>
+
+    <span
+        class="status-pill ${status.className}"
+    >
+        ${escapeHtml(status.label)} -
+        ${escapeHtml(status.description)}
+    </span>
+<!--
+    ${
+        adminMode &&
+        String(record.Status || "").trim() === "Pass with Front Desk Security"
+        ?
+        `
+            <button
+                type="button"
+                class="issue-pass-button"
+                data-issue-pass-id="${escapeHtml(record.ID)}"
+            >
+                Issue Pass
+            </button>
+        `
+        :
+        ""
+    }
+-->
+</td>
+
+${
+                                        adminMode &&
+                                                String(record.Status || "").trim() === "Pass with Front Desk Security"
+        
+                                        ?
+                                        `
+                                            <td>
+                                                            <button
+                type="button"
+                class="issue-pass-button"
+                data-issue-pass-id="${escapeHtml(record.ID)}"
+            >
+                Issue Pass
+            </button>
+            '
+                                            </td>
+                                        `
+                                        :
+                                        ""
+                                    }
+
+
+                                </tr>
+
+                            `;
+
+                        }
+                    ).join("")}
+
+                </tbody>
+
+            </table>
+
+        `;
+
+    }
+
+
+/*
+    ============================================================
+    BIND TABLE ROWS
+    ============================================================
+    */
+
+function bindTableRows() {
+
+    var rows =
+        dashboard.querySelectorAll(
+            "#passTableContainer tbody tr"
         );
 
 
-        var modal =
+    rows.forEach(
+        function (row) {
+
+            // ----------------------------------------------------
+            // Row click - open details
+            // ----------------------------------------------------
+
+            row.addEventListener(
+                "click",
+                function (event) {
+
+                    // Don't open the details panel when the
+                    // Issue Pass button has been clicked.
+                    if (
+                        event.target.closest(
+                            ".issue-pass-button"
+                        )
+                    ) {
+                        return;
+                    }
+
+
+                    var id =
+                        this.getAttribute(
+                            "data-record-id"
+                        );
+
+
+                    var record =
+                        data.find(
+                            function (item) {
+
+                                return String(
+                                    item.ID
+                                ) ===
+                                String(id);
+
+                            }
+                        );
+
+
+                    if (record) {
+
+                        showDetails(
+                            record
+                        );
+
+                    }
+
+                }
+            );
+
+
+            // ----------------------------------------------------
+            // Issue Pass button
+            // ----------------------------------------------------
+
+            var issueButton =
+                row.querySelector(
+                    ".issue-pass-button"
+                );
+
+
+            if (issueButton) {
+
+                issueButton.addEventListener(
+                    "click",
+                    function (event) {
+
+                        event.stopPropagation();
+
+
+                        var id =
+                            this.getAttribute(
+                                "data-issue-pass-id"
+                            );
+
+
+                        issuePass(id);
+
+                    }
+                );
+
+            }
+
+        }
+    );
+
+}
+
+/*
+============================================================
+ISSUE PASS
+============================================================
+*/
+
+async function issuePass(itemId) {
+
+    if (
+        !confirm(
+            "Are you sure you want to issue this pass?"
+        )
+    ) {
+        return;
+    }
+
+
+    try {
+
+        /*
+        ========================================================
+        GET LOGGED-IN USER
+        ========================================================
+        */
+
+        var currentUserResponse =
+            await fetch(
+                SITE_URL +
+                "/_api/web/currentuser",
+                {
+                    method: "GET",
+
+                    headers: {
+                        "Accept":
+                            "application/json;odata=verbose"
+                    }
+                }
+            );
+
+
+        if (!currentUserResponse.ok) {
+
+            throw new Error(
+                "Unable to identify the logged-in user."
+            );
+
+        }
+
+
+        var currentUserData =
+            await currentUserResponse.json();
+
+
+        var loggedInUser =
+            currentUserData.d.Title ||
+            currentUserData.d.LoginName ||
+            "Unknown user";
+
+
+        /*
+        ========================================================
+        GET REQUEST DIGEST
+        ========================================================
+        */
+
+        var contextResponse =
+            await fetch(
+                SITE_URL +
+                "/_api/contextinfo",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Accept":
+                            "application/json;odata=verbose"
+                    }
+                }
+            );
+
+
+        if (!contextResponse.ok) {
+
+            var contextError =
+                await contextResponse.text();
+
+            console.error(
+                "Context info error:",
+                contextError
+            );
+
+            throw new Error(
+                "Unable to obtain the SharePoint request digest."
+            );
+
+        }
+
+
+        var contextData =
+            await contextResponse.json();
+
+
+        var requestDigest =
+            contextData.d
+                .GetContextWebInformation
+                .FormDigestValue;
+
+
+        /*
+        ========================================================
+        TODAY'S DATE
+        ========================================================
+        */
+
+        var today =
+            new Date();
+
+
+        var day =
+            String(
+                today.getDate()
+            ).padStart(2, "0");
+
+
+        var month =
+            String(
+                today.getMonth() + 1
+            ).padStart(2, "0");
+
+
+        var year =
+            today.getFullYear();
+
+
+        var formattedDate =
+            `${day}/${month}/${year}`;
+
+
+        /*
+        ========================================================
+        NEW STATUS
+        ========================================================
+        */
+
+        var newStatus =
+            `Pass issued (${formattedDate}) by ${loggedInUser}`;
+
+
+        /*
+        ========================================================
+        UPDATE SHAREPOINT ITEM
+        ========================================================
+        */
+
+        var updateResponse =
+            await fetch(
+
+                LIST_API_URL +
+                "(" +
+                itemId +
+                ")",
+
+                {
+                    method: "POST",
+
+                    headers: {
+
+                        "Accept":
+                            "application/json;odata=verbose",
+
+                        "Content-Type":
+                            "application/json;odata=verbose",
+
+                        "X-HTTP-Method":
+                            "MERGE",
+
+                        "IF-MATCH":
+                            "*",
+
+                        "X-RequestDigest":
+                            requestDigest
+
+                    },
+
+                    body: JSON.stringify({
+
+                        "__metadata": {
+
+                            "type":
+                                LIST_ITEM_TYPE
+
+                        },
+
+                        "Status":
+                            newStatus
+
+                    })
+
+                }
+
+            );
+
+
+        /*
+        ========================================================
+        CHECK RESPONSE
+        ========================================================
+        */
+
+        var responseText =
+            await updateResponse.text();
+
+
+        if (!updateResponse.ok) {
+
+            console.error(
+                "SharePoint update failed:",
+                updateResponse.status,
+                responseText
+            );
+
+            throw new Error(
+                `SharePoint returned ${updateResponse.status}: ${responseText}`
+            );
+
+        }
+
+
+        /*
+        ========================================================
+        SUCCESS
+        ========================================================
+        */
+
+        alert(
+            "Pass issued successfully."
+        );
+
+
+        location.reload();
+
+
+    } catch (error) {
+
+        console.error(
+            "Issue Pass error:",
+            error
+        );
+
+
+        alert(
+            "Unable to issue the pass.\n\n" +
+            error.message
+        );
+
+    }
+
+}
+    /*
+    ============================================================
+    DETAILS MODAL
+    ============================================================
+    */
+
+    function showDetails(record) {
+
+        var status =
+            getStatus(record);
+
+
+        var expiry =
+            getExpiry(record);
+
+
+        var overlay =
             document.createElement(
                 "div"
             );
 
 
-        modal.id =
-            "nsv-modal-overlay";
+        overlay.className =
+            "details-overlay";
 
 
-        modal.className =
-            "nsv-modal-overlay";
+        overlay.innerHTML = `
+
+            <div class="details-modal">
 
 
-        modal.innerHTML = `
+                <div class="modal-header">
 
-            <div
-                class="nsv-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="nsv-modal-title"
-            >
+                    <h2>
+                        Pass Request #${escapeHtml(record.ID)}
+                    </h2>
 
-                <div class="nsv-modal-header">
-
-                    <div>
-
-                        <h2
-                            id="nsv-modal-title"
-                            class="nsv-modal-title"
-                        >
-                            Application: ${escapeHtml(
-                                getFieldValue(
-                                    item,
-                                    "field_6"
-                                )
-                            )}
-                        </h2>
-
-                        <p class="nsv-modal-description">
-                            Review the application, then confirm to move it to the overall NSV register.
-                        </p>
-
-                    </div>
 
                     <button
+                        class="close-button"
                         type="button"
-                        id="nsv-modal-close"
-                        class="nsv-modal-close"
-                        aria-label="Close"
                     >
-                        &#215;
+                        ×
                     </button>
 
                 </div>
 
-                <div
-                    id="nsv-modal-error"
-                    class="nsv-modal-error"
-                    style="display:none;"
-                ></div>
 
-                <div class="nsv-form">
+                <div class="modal-body">
 
-                    <div class="nsv-form-grid">
 
-                        ${fieldsHtml}
+                    <div class="detail-grid">
 
-                    </div>
 
-                    <div class="nsv-modal-footer">
+                        <div class="detail-section">
 
-                        <button
-                            type="button"
-                            id="nsv-modal-cancel"
-                            class="nsv-modal-button nsv-secondary-button"
-                        >
-                            Close
-                        </button>
+                            <div class="detail-section-title">
+                                Pass Details
+                            </div>
 
-                        <button
-                            type="button"
-                            id="nsv-modal-confirm-complete"
-                            class="nsv-modal-button nsv-primary-button"
-                        >
-                            Confirm Complete
-                        </button>
+
+                            <div class="detail-section-body">
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Status
+                                    </div>
+
+                                    <div class="detail-value">
+
+                                        <span
+                                            class="status-pill ${status.className}"
+                                        >
+                                            ${escapeHtml(status.label)}
+                                        </span>
+
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Pass Holder
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.Pass_Holder)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        National Insurance Number
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.NI)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Site
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.Site)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Clearance
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.Clearance_Level)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Request Date
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${formatDate(record.RequestDate)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Required Date
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${formatDate(record.Required_Date)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Expiry Date
+                                    </div>
+
+                                    <div class="detail-value">
+
+                                        ${formatDate(record.Expiry_Date)}
+
+                                        <div class="${expiry.className}">
+                                            ${escapeHtml(expiry.label)}
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="detail-section">
+
+                            <div class="detail-section-title">
+                                Pass Requester
+                            </div>
+
+
+                            <div class="detail-section-body">
+
+
+                                ${
+                                    record.Author &&
+                                    record.Author.Picture
+
+                                    ?
+
+                                    `
+
+                                        <div class="person">
+
+                                            <img
+                                                src="${escapeHtml(record.Author.Picture)}"
+                                                alt=""
+                                            >
+
+                                            <div>
+
+                                                <div class="person-name">
+                                                    ${escapeHtml(record.Author.DisplayName)}
+                                                </div>
+
+                                                <div class="person-email">
+                                                    ${escapeHtml(record.Author.Email)}
+                                                </div>
+
+                                            </div>
+
+                                        </div>
+
+                                    `
+
+                                    :
+
+                                    ""
+
+                                }
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Requester
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.Pass_Requester)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Department
+                                    </div>
+
+                                    <div class="detail-value">
+
+                                        ${
+                                            record.Author
+                                                ? escapeHtml(
+                                                    record.Author.Department
+                                                )
+                                                : ""
+                                        }
+
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Job Title
+                                    </div>
+
+                                    <div class="detail-value">
+
+                                        ${
+                                            record.Author
+                                                ? escapeHtml(
+                                                    record.Author.JobTitle
+                                                )
+                                                : ""
+                                        }
+
+                                    </div>
+
+                                </div>
+
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="detail-section detail-section-full">
+
+                            <div class="detail-section-title">
+                                Access Permissions
+                            </div>
+
+
+                            <div class="detail-section-body">
+
+                                <div class="access-tags">
+
+                                    ${accessTags(record.Access)}
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="detail-section detail-section-full">
+
+                            <div class="detail-section-title">
+                                Justification
+                            </div>
+
+
+                            <div class="detail-section-body">
+
+                                <div class="justification">
+
+                                    ${escapeHtml(
+                                        record.Justification
+                                    )}
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="detail-section detail-section-full">
+
+                            <div class="detail-section-title">
+                                Record Information
+                            </div>
+
+
+                            <div class="detail-section-body">
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Record ID
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.ID)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Created
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${formatDateTime(record.Created)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Modified
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${formatDateTime(record.Modified)}
+                                    </div>
+
+                                </div>
+
+
+                                <div class="detail-row">
+
+                                    <div class="detail-label">
+                                        Status Detail
+                                    </div>
+
+                                    <div class="detail-value">
+                                        ${escapeHtml(record.Status)}
+                                    </div>
+
+                                </div>
+
+
+                            </div>
+
+                        </div>
+
 
                     </div>
 
@@ -7220,401 +8336,341 @@ byId("nsv-applications").addEventListener(
 
 
         document.body.appendChild(
-            modal
+            overlay
         );
 
 
-        document.body.classList.add(
-            "nsv-modal-open"
-        );
-
-
-        attachApplicationModalEvents(
-            item
-        );
-
-    }
-
-
-    function attachApplicationModalEvents(
-        item
-    ) {
-
-        var closeButton =
-            byId(
-                "nsv-modal-close"
-            );
-
-        var cancelButton =
-            byId(
-                "nsv-modal-cancel"
-            );
-
-        var confirmButton =
-            byId(
-                "nsv-modal-confirm-complete"
-            );
-
-
-        if (closeButton) {
-
-            closeButton.addEventListener(
-                "click",
-                closeModal
-            );
-
-        }
-
-
-        if (cancelButton) {
-
-            cancelButton.addEventListener(
-                "click",
-                closeModal
-            );
-
-        }
-
-
-        if (confirmButton) {
-
-            confirmButton.addEventListener(
+        overlay
+            .querySelector(
+                ".close-button"
+            )
+            .addEventListener(
                 "click",
                 function () {
 
-                    confirmCompleteApplication(
-                        item
-                    );
+                    overlay.remove();
 
                 }
             );
 
-        }
 
+        overlay.addEventListener(
+            "click",
+            function (event) {
 
-        var overlay =
-            byId(
-                "nsv-modal-overlay"
-            );
+                if (
+                    event.target ===
+                    overlay
+                ) {
 
-
-        if (overlay) {
-
-            overlay.addEventListener(
-                "click",
-                function (event) {
-
-                    if (
-                        event.target ===
-                        overlay
-                    ) {
-
-                        closeModal();
-
-                    }
+                    overlay.remove();
 
                 }
-            );
+
+            }
+        );
+
+
+        function closeOnEscape(event) {
+
+            if (
+                event.key ===
+                "Escape"
+            ) {
+
+                overlay.remove();
+
+
+                document.removeEventListener(
+                    "keydown",
+                    closeOnEscape
+                );
+
+            }
 
         }
 
 
         document.addEventListener(
             "keydown",
-            modalEscapeHandler
+            closeOnEscape
         );
 
     }
 
 
-    /* ============================================================
-       APPLICATIONS: CONFIRM COMPLETE
-       ============================================================ */
+    /*
+    ============================================================
+    LOAD DATA FROM SHAREPOINT
+    ============================================================
+    */
 
-    async function confirmCompleteApplication(
-        item
-    ) {
+    function loadData() {
 
-        if (
-            !item ||
-            !item.ID
-        ) {
-
-            showModalError(
-                "The selected application could not be identified."
-            );
-
-            return;
-
-        }
+        console.log(
+            "Pass Dashboard: Loading SharePoint data..."
+        );
 
 
-        var confirmButton =
-            byId(
-                "nsv-modal-confirm-complete"
-            );
-
-        var cancelButton =
-            byId(
-                "nsv-modal-cancel"
-            );
+        var url =
+            LIST_API_URL +
+            "?$orderby=ID%20desc";
 
 
-        if (confirmButton) {
-
-            confirmButton.disabled =
-                true;
-
-            confirmButton.classList.add(
-                "nsv-button-loading"
-            );
-
-            confirmButton.textContent =
-                "Moving...";
-
-        }
+        console.log(
+            "SharePoint API URL:",
+            url
+        );
 
 
-        if (cancelButton) {
+        fetch(
+            url,
+            {
+                method: "GET",
 
-            cancelButton.disabled =
-                true;
+                credentials:
+                    "same-origin",
 
-        }
+                headers: {
+
+                    "Accept":
+                        "application/json;odata=verbose"
+
+                },
+
+                cache:
+                    "no-store"
+
+            }
+        )
+
+        .then(
+            function (response) {
+
+                if (!response.ok) {
+
+                    return response.text()
+                        .then(
+                            function (text) {
+
+                                console.error(
+                                    "SharePoint API error response:",
+                                    text
+                                );
 
 
-        /*
-         * Copy every field that exists on TABLE_COLUMNS
-         * (the schema is shared between the Applications
-         * list and the NSV Workbook list) straight across.
-         */
-        var data = {};
+                                throw new Error(
+                                    "SharePoint returned HTTP " +
+                                    response.status +
+                                    " - " +
+                                    text
+                                );
 
-        TABLE_COLUMNS.forEach(
-            function (column) {
+                            }
+                        );
 
-                var value =
-                    item[
-                        column.field
-                    ];
+                }
 
-                data[
-                    column.field
-                ] =
-                    value === undefined
-                        ? null
-                        : value;
+
+                return response.json();
+
+            }
+        )
+
+        .then(
+            function (json) {
+
+                console.log(
+                    "SharePoint response:",
+                    json
+                );
+
+
+                if (
+                    !json ||
+                    !json.d ||
+                    !Array.isArray(
+                        json.d.results
+                    )
+                ) {
+
+                    throw new Error(
+                        "SharePoint returned an unexpected response format."
+                    );
+
+                }
+
+
+                allData =
+                    json.d.results;
+
+
+                console.log(
+                    "Total SharePoint records loaded:",
+                    allData.length
+                );
+
+
+                if (
+                    currentView ===
+                    "admin"
+                ) {
+
+                    if (isAdmin) {
+
+                        prepareAdminDashboard();
+
+                    }
+                    else {
+
+                        currentView =
+                            "home";
+
+                        renderHome();
+
+                    }
+
+                }
+
+                else if (
+                    currentView ===
+                    "dashboard"
+                ) {
+
+                    prepareUserDashboard();
+
+                }
+
+                else if (
+                    currentView ===
+                    "submit"
+                ) {
+
+                    return;
+
+                }
+
+                else {
+
+                    renderHome();
+
+                }
+
+            }
+        )
+
+        .catch(
+            function (error) {
+
+                console.error(
+                    "Pass Dashboard: Unable to load SharePoint data.",
+                    error
+                );
+
+
+                dashboard.innerHTML = `
+
+                    <div class="error-state">
+
+                        <h2>
+                            Unable to load pass data
+                        </h2>
+
+                        <p>
+                            The dashboard could not retrieve
+                            your Building Pass records from SharePoint.
+                        </p>
+
+                        <p>
+                            <strong>Error:</strong>
+                            ${escapeHtml(
+                                error.message
+                            )}
+                        </p>
+
+                        <p>
+                            Please check that you have access
+                            to the Building Pass register.
+                        </p>
+
+                    </div>
+
+                `;
 
             }
         );
 
-
-        var createdInWorkbook =
-            false;
+    }
 
 
-        try {
+    /*
+    ============================================================
+    START APPLICATION
+    ============================================================
+    */
 
-            setStatus(
-                "Adding record to the NSV register..."
+    Promise.all(
+        [
+            getCurrentUser(),
+            getAvailableSites()
+        ]
+    )
+    .then(
+        function () {
+
+            console.log(
+                "SharePoint user and Site list loaded."
             );
 
 
-            var createUrl =
-
-                SITE_URL +
-
-                "/_api/web/lists/GetByTitle('" +
-
-                encodeURIComponent(
-                    LIST_TITLE
-                ) +
-
-                "')/items";
+            renderHome();
 
 
-            var createDigest =
-                await getRequestDigest();
-
-
-            await apiPost(
-                createUrl,
-                JSON.stringify(
-                    data
-                ),
-                {
-                    "Content-Type":
-                        "application/json;odata=nometadata",
-
-                    "X-RequestDigest":
-                        createDigest
-                }
-            );
-
-
-            createdInWorkbook =
-                true;
-
-
-            setStatus(
-                "Removing application from NSV Applications..."
-            );
-
-
-            var deleteUrl =
-
-                SITE_URL +
-
-                "/_api/web/lists/GetByTitle('" +
-
-                encodeURIComponent(
-                    APPLICATIONS_LIST_TITLE
-                ) +
-
-                "')/items(" +
-
-                item.ID +
-
-                ")";
-
-
-            var deleteDigest =
-                await getRequestDigest();
-
-
-            await apiDelete(
-                deleteUrl,
-                {
-                    "X-RequestDigest":
-                        deleteDigest
-                }
-            );
-
-
-            closeModal();
-
-
-            selectedApplicationItem =
-                null;
-
-
-            await loadItems();
-
-            await loadApplicationItems();
-
-
-            setStatus(
-                "Successfully moved to overall NSV register."
-            );
+            loadData();
 
         }
-        catch (error) {
+    )
+    .catch(
+        function (error) {
 
             console.error(
-                "Confirm complete error:",
+                "Pass application initialisation failed.",
                 error
             );
 
 
-            if (!createdInWorkbook) {
-
-                /*
-                 * The record was never created in the
-                 * Workbook, so the application is untouched
-                 * and it is safe to let the user retry.
-                 */
-                showModalError(
-                    (
-                        error &&
-                        error.message
-                    )
-                        ? error.message
-                        : "Unable to add the record to the NSV register."
-                );
+            renderHome();
 
 
-                if (confirmButton) {
-
-                    confirmButton.disabled =
-                        false;
-
-                    confirmButton.classList.remove(
-                        "nsv-button-loading"
-                    );
-
-                    confirmButton.textContent =
-                        "Confirm Complete";
-
-                }
-
-
-                if (cancelButton) {
-
-                    cancelButton.disabled =
-                        false;
-
-                }
-
-
-                setStatus(
-                    "ERROR: " +
-                    (
-                        error &&
-                        error.message
-                            ? error.message
-                            : "Unable to add the record to the NSV register."
-                    )
-                );
-
-                return;
-
-            }
-
-
-            /*
-             * The record WAS created in the Workbook but the
-             * delete from Applications failed. Do not let the
-             * button be clicked again — that would create a
-             * duplicate Workbook record. Surface a clear,
-             * actionable message instead.
-             */
-            showModalError(
-                "The record was added to the NSV register, but could not be removed from " +
-                "NSV Applications (ID " +
-                item.ID +
-                "). Please delete it manually from NSV Applications to avoid a duplicate."
-            );
-
-
-            setStatus(
-                "ERROR: record added to NSV register, but the application record (ID " +
-                item.ID +
-                ") could not be removed automatically. Please delete it manually."
-            );
-
-
-            if (cancelButton) {
-
-                cancelButton.disabled =
-                    false;
-
-            }
-
-
-            await loadItems();
+            loadData();
 
         }
+    );
 
-    }
+
+    /*
+    ============================================================
+    AUTOMATIC REFRESH
+    ============================================================
+
+    Refresh every 5 minutes.
+
+    ============================================================
+    */
+
+    setInterval(
+        function () {
+
+            loadData();
+
+        },
+        5 * 60 * 1000
+    );
 
 
-    /* ============================================================
-       START
-       ============================================================ */
-
-    attachPanelResizeHandler();
-
-    initialise();
+    console.log(
+        "Pass Dashboard initialised."
+    );
 
 
 })();

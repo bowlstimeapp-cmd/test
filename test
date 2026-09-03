@@ -10,7 +10,6 @@
     */
 
 
-
     /*
     ============================================================
     SELECTED PASS HOLDER
@@ -20,6 +19,8 @@
     var selectedPassHolder = null;
 
     var passHolderSearchTimer = null;
+
+    var passHolderType = "employee";
 
 
     /*
@@ -43,6 +44,190 @@
         ".png",
         ".pdf"
     ];
+
+
+    /*
+    ============================================================
+    ATTACHMENT HELPER FUNCTIONS
+
+    These are used throughout the attachment upload code
+    (file input validation, size display, SharePoint filename
+    handling, and error messages).
+    ============================================================
+    */
+
+    function formatFileSize(bytes) {
+
+        if (
+            bytes === null ||
+            bytes === undefined ||
+            isNaN(bytes)
+        ) {
+
+            return "";
+
+        }
+
+
+        if (bytes < 1024) {
+
+            return bytes + " B";
+
+        }
+
+
+        if (bytes < 1024 * 1024) {
+
+            return (
+                bytes / 1024
+            ).toFixed(1) + " KB";
+
+        }
+
+
+        return (
+            bytes / (1024 * 1024)
+        ).toFixed(1) + " MB";
+
+    }
+
+
+    function getAttachmentExtension(fileName) {
+
+        var safeName =
+            String(
+                fileName || ""
+            );
+
+
+        var lastDot =
+            safeName.lastIndexOf(".");
+
+
+        if (lastDot === -1) {
+
+            return "";
+
+        }
+
+
+        return safeName.substring(
+            lastDot
+        ).toLowerCase();
+
+    }
+
+
+    function validateAttachmentFile(file) {
+
+        if (!file) {
+
+            return {
+
+                valid: false,
+
+                message:
+                    "No file was selected."
+
+            };
+
+        }
+
+
+        if (file.size > MAX_ATTACHMENT_SIZE) {
+
+            return {
+
+                valid: false,
+
+                message:
+                    "File is too large. Maximum file size is 10 MB."
+
+            };
+
+        }
+
+
+        var extension =
+            getAttachmentExtension(
+                file.name
+            );
+
+
+        var typeAllowed =
+            ALLOWED_ATTACHMENT_TYPES.indexOf(
+                file.type
+            ) !== -1;
+
+
+        var extensionAllowed =
+            ALLOWED_ATTACHMENT_EXTENSIONS.indexOf(
+                extension
+            ) !== -1;
+
+
+        /*
+        ------------------------------------------------------------
+        Some browsers/OS combinations report an empty or generic
+        MIME type for certain files, so we accept the file if
+        EITHER the MIME type OR the file extension is allowed.
+        ------------------------------------------------------------
+        */
+
+        if (
+            !typeAllowed &&
+            !extensionAllowed
+        ) {
+
+            return {
+
+                valid: false,
+
+                message:
+                    "Unsupported file type. Allowed types: JPG, PNG, PDF."
+
+            };
+
+        }
+
+
+        return {
+
+            valid: true,
+
+            message: ""
+
+        };
+
+    }
+
+
+    function showAttachmentError(message) {
+
+        var errorContainer =
+            document.getElementById(
+                "passAttachmentError"
+            );
+
+
+        if (!errorContainer) {
+
+            return;
+
+        }
+
+
+        errorContainer.textContent =
+            message ||
+            "";
+
+
+        errorContainer.style.display =
+            message
+                ? "block"
+                : "none";
+
+    }
 
 
     /*
@@ -86,7 +271,11 @@
 
         "joshua.davis@mcga.gov.uk",
 
-        "chris.townsend@mcga.gov.uk"
+        "chris.townsend@mcga.gov.uk",
+
+        "hqsecuritymanager@mcga.gov.uk", 
+
+        "frontdesksecurity@mcga.gov.uk"
 
     ];
 
@@ -190,6 +379,7 @@
         ],
 
         "Spring Place": [
+            "MCA General Access",
             "MCA Marine Office",
             "MCA IT Build Room",
             "MCA Disaster Recovery Suite",
@@ -307,7 +497,7 @@
                 font-weight:600;
                 margin-bottom:8px;
             ">
-                Loading Access Pass Dashboard...
+                Loading Building Pass Request Dashboard...
             </div>
 
             <div style="
@@ -825,80 +1015,59 @@
     }
 
 
-    /*
-    ============================================================
-    STATUS
-    ============================================================
-    */
+   /* ============================================================
+   STATUS
+   ============================================================ */
 
-    function getStatus(record) {
+function getStatus(record) {
 
-        var value =
-            String(
-                record.Status || ""
-            ).toLowerCase();
+    var value = String(record.Status || "").trim();
+    var lowerValue = value.toLowerCase();
 
+    // ------------------------------------------------------------
+    // High-level dashboard status
+    // ------------------------------------------------------------
 
-        if (
-            value.indexOf(
-                "pass issued"
-            ) !== -1
-        ) {
-
-            return {
-
-                label: "Issued",
-
-                className: "status-green"
-
-            };
-
-        }
-
-
-        if (
-            value.indexOf(
-                "pass with"
-            ) !== -1
-        ) {
-
-            return {
-
-                label: "Pending",
-
-                className: "status-amber"
-
-            };
-
-        }
-
-
-        if (
-            value.indexOf(
-                "rejected"
-            ) !== -1
-        ) {
-
-            return {
-
-                label: "Rejected",
-
-                className: "status-red"
-
-            };
-
-        }
-
+    if (lowerValue.indexOf("pass issued") !== -1) {
 
         return {
-
-            label: "Other",
-
-            className: "status-grey"
-
+            label: "Issued",
+            description: value || "Pass issued",
+            className: "status-green"
         };
 
     }
+
+    if (lowerValue.indexOf("rejected") !== -1) {
+
+        return {
+            label: "Rejected",
+            description: value || "Application rejected",
+            className: "status-red"
+        };
+
+    }
+
+    if (lowerValue.indexOf("pass with") !== -1) {
+
+        return {
+            label: "Pending",
+            description: value || "Pass in progress",
+            className: "status-amber"
+        };
+
+    }
+
+    // ------------------------------------------------------------
+    // Other
+    // ------------------------------------------------------------
+
+    return {
+        label: "Other",
+        description: value || "Status unavailable",
+        className: "status-grey"
+    };
+}
 
 
     /*
@@ -1261,6 +1430,1959 @@
 
     }
 
+
+    /*
+    ============================================================
+    CSS
+    ============================================================
+    */
+
+    var style =
+        document.createElement(
+            "style"
+        );
+
+
+    style.textContent = `
+
+        #passDashboard {
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            color:#323130;
+
+            width:100%;
+
+            max-width:1250px;
+
+            margin:0 auto;
+        }
+
+
+        #passDashboard * {
+            box-sizing:border-box;
+        }
+
+
+        .dashboard-header {
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #003b5c,
+                    #0078d4
+                );
+
+            color:white;
+
+            padding:28px 30px;
+
+            border-radius:10px;
+
+            margin-bottom:18px;
+        }
+
+
+        .dashboard-header h1 {
+
+            margin:0;
+
+            font-size:28px;
+
+            font-weight:600;
+        }
+
+/* ============================================================
+   ISSUE PASS BUTTON
+   ============================================================ */
+
+.action-cell {
+    white-space: nowrap;
+}
+
+
+.issue-pass-button {
+    margin-top:5%;
+    appearance: none;
+    border: 1px solid #198754;
+    background: #198754;
+    color: #ffffff;
+    white-space:nowrap;
+    margin-left: auto;
+    display: block;
+
+    padding: 6px 12px;
+
+    border-radius: 5px;
+
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+
+    line-height: 1.4;
+
+    cursor: pointer;
+
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease,
+        box-shadow 0.15s ease,
+        transform 0.05s ease;
+}
+
+
+.issue-pass-button:hover {
+    background: #157347;
+    border-color: #146c43;
+}
+
+
+.issue-pass-button:focus {
+    outline: none;
+
+    box-shadow:
+        0 0 0 3px rgba(25, 135, 84, 0.20);
+}
+
+
+.issue-pass-button:active {
+    background: #146c43;
+    border-color: #13653f;
+
+    transform: translateY(1px);
+}
+
+
+.issue-pass-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+        .dashboard-header p {
+
+            margin:
+                6px 0 0 0;
+
+            opacity:.85;
+
+            font-size:14px;
+        }
+
+
+        .admin-banner {
+
+            background:#fff4ce;
+
+            color:#8a6d00;
+
+            border-left:
+                4px solid #ffb900;
+
+            padding:10px 14px;
+
+            border-radius:6px;
+
+            margin-bottom:15px;
+
+            font-size:13px;
+
+            font-weight:600;
+        }
+
+
+        .summary-grid {
+
+            display:grid;
+
+            grid-template-columns:
+                repeat(5,1fr);
+
+            gap:14px;
+
+            margin-bottom:18px;
+        }
+
+
+        .summary-card {
+
+            background:white;
+
+            border:
+                1px solid #edebe9;
+
+            border-radius:9px;
+
+            padding:18px;
+
+            box-shadow:
+                0 2px 6px
+                rgba(0,0,0,.05);
+        }
+
+
+        .summary-label {
+
+            font-size:11px;
+
+            font-weight:600;
+
+            text-transform:uppercase;
+
+            color:#605e5c;
+
+            letter-spacing:.5px;
+        }
+
+
+        .summary-number {
+
+            font-size:30px;
+
+            font-weight:600;
+
+            margin-top:5px;
+        }
+
+
+        .number-blue {
+            color:#0078d4;
+        }
+
+
+        .number-green {
+            color:#107c10;
+        }
+
+
+        .number-amber {
+            color:#ca5010;
+        }
+
+
+        .number-red {
+            color:#a4262c;
+        }
+
+
+        .controls {
+
+            display:flex;
+
+            gap:12px;
+
+            align-items:center;
+
+            background:white;
+
+            border:
+                1px solid #edebe9;
+
+            padding:15px;
+
+            border-radius:9px;
+
+            margin-bottom:15px;
+
+            box-shadow:
+                0 2px 6px
+                rgba(0,0,0,.05);
+        }
+
+
+        .search-box {
+
+            flex:1;
+
+            min-width:200px;
+
+            padding:
+                10px 13px;
+
+            border:
+                1px solid #8a8886;
+
+            border-radius:5px;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            font-size:14px;
+        }
+
+
+        .search-box:focus {
+
+            outline:none;
+
+            border-color:#0078d4;
+
+            box-shadow:
+                0 0 0 1px #0078d4;
+        }
+
+
+        .filter-select {
+
+            padding:
+                10px 13px;
+
+            border:
+                1px solid #8a8886;
+
+            border-radius:5px;
+
+            background:white;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            font-size:14px;
+
+            min-width:150px;
+        }
+
+
+        .record-count {
+
+            color:#605e5c;
+
+            font-size:13px;
+
+            white-space:nowrap;
+        }
+
+
+        .table-container {
+
+            background:white;
+
+            border:
+                1px solid #edebe9;
+
+            border-radius:9px;
+
+            overflow:hidden;
+
+            box-shadow:
+                0 2px 6px
+                rgba(0,0,0,.05);
+        }
+
+
+        .pass-table {
+
+            width:100%;
+
+            border-collapse:collapse;
+        }
+
+
+        .pass-table th {
+
+            background:#f3f2f1;
+
+            color:#323130;
+
+            font-size:12px;
+
+            font-weight:600;
+
+            text-align:left;
+
+            padding:13px 14px;
+
+            border-bottom:
+                1px solid #edebe9;
+
+            white-space:nowrap;
+        }
+
+
+        .pass-table td {
+
+            padding:14px;
+
+            border-bottom:
+                1px solid #f3f2f1;
+
+            font-size:13px;
+
+            vertical-align:middle;
+        }
+
+
+        .pass-table tbody tr {
+
+            cursor:pointer;
+
+            transition:
+                background .15s;
+        }
+
+
+        .pass-table tbody tr:hover {
+
+            background:#f5f9fc;
+        }
+
+
+        .pass-table tbody tr:last-child td {
+
+            border-bottom:none;
+        }
+
+
+        .id-cell {
+
+            font-weight:600;
+
+            color:#0078d4;
+        }
+
+
+        .holder-cell {
+
+            font-weight:600;
+        }
+
+
+        .status-pill {
+
+            display:inline-block;
+
+            padding:5px 10px;
+
+            border-radius:20px;
+
+            font-size:11px;
+
+            font-weight:600;
+
+            white-space:normal;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+
+
+        .status-green {
+
+            background:#dff6dd;
+
+            color:#107c10;
+        }
+
+
+        .status-amber {
+
+            background:#fff4ce;
+
+            color:#8a6d00;
+        }
+
+
+        .status-red {
+
+            background:#fde7e9;
+
+            color:#a4262c;
+        }
+
+
+        .status-grey {
+
+            background:#edebe9;
+
+            color:#605e5c;
+        }
+
+
+        .expiry-green {
+
+            color:#107c10;
+
+            font-weight:600;
+
+            font-size:11px;
+        }
+
+
+        .expiry-amber {
+
+            color:#ca5010;
+
+            font-weight:600;
+
+            font-size:11px;
+        }
+
+
+        .expiry-red {
+
+            color:#a4262c;
+
+            font-weight:600;
+
+            font-size:11px;
+        }
+
+
+        .expiry-grey {
+
+            color:#605e5c;
+
+            font-size:11px;
+        }
+
+
+        .empty-state {
+
+            padding:50px 20px;
+
+            text-align:center;
+
+            color:#605e5c;
+        }
+
+
+        .error-state {
+
+            background:#fde7e9;
+
+            border-left:
+                5px solid #a4262c;
+
+            padding:25px;
+
+            border-radius:8px;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+        }
+
+
+        .error-state h2 {
+
+            margin:
+                0 0 8px 0;
+
+            color:#a4262c;
+
+            font-size:20px;
+        }
+
+
+        .error-state p {
+
+            margin:5px 0;
+
+            color:#323130;
+
+            font-size:14px;
+        }
+
+
+        .details-overlay {
+
+            position:fixed;
+
+            top:0;
+
+            left:0;
+
+            right:0;
+
+            bottom:0;
+
+            background:
+                rgba(0,0,0,.45);
+
+            z-index:99999;
+
+            display:flex;
+
+            justify-content:center;
+
+            align-items:center;
+
+            padding:20px;
+        }
+
+
+        .details-modal {
+
+            background:white;
+
+            border-radius:10px;
+
+            width:100%;
+
+            max-width:900px;
+
+            max-height:90vh;
+
+            overflow:auto;
+
+            box-shadow:
+                0 15px 50px
+                rgba(0,0,0,.3);
+        }
+
+
+        .modal-header {
+
+            display:flex;
+
+            justify-content:space-between;
+
+            align-items:center;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #003b5c,
+                    #0078d4
+                );
+
+            color:white;
+
+            padding:20px 24px;
+        }
+
+
+        .modal-header h2 {
+
+            margin:0;
+
+            font-size:21px;
+        }
+
+
+        .close-button {
+
+            border:none;
+
+            background:
+                rgba(255,255,255,.15);
+
+            color:white;
+
+            width:34px;
+
+            height:34px;
+
+            border-radius:50%;
+
+            font-size:20px;
+
+            cursor:pointer;
+        }
+
+
+        .close-button:hover {
+
+            background:
+                rgba(255,255,255,.3);
+        }
+
+
+        .modal-body {
+
+            padding:24px;
+        }
+
+
+        .detail-grid {
+
+            display:grid;
+
+            grid-template-columns:
+                1fr 1fr;
+
+            gap:20px;
+        }
+
+
+        .detail-section {
+
+            border:
+                1px solid #edebe9;
+
+            border-radius:8px;
+
+            overflow:hidden;
+        }
+
+
+        .detail-section-full {
+
+            grid-column:
+                1 / -1;
+        }
+
+
+        .detail-section-title {
+
+            background:#f3f2f1;
+
+            padding:12px 15px;
+
+            font-weight:600;
+
+            font-size:14px;
+        }
+
+
+        .detail-section-body {
+
+            padding:15px;
+        }
+
+
+        .detail-row {
+
+            display:grid;
+
+            grid-template-columns:
+                145px 1fr;
+
+            gap:12px;
+
+            padding:8px 0;
+
+            border-bottom:
+                1px solid #f3f2f1;
+        }
+
+
+        .detail-row:last-child {
+
+            border-bottom:none;
+        }
+
+
+        .detail-label {
+
+            color:#605e5c;
+
+            font-size:12px;
+
+            font-weight:600;
+        }
+
+
+        .detail-value {
+
+            font-size:13px;
+
+            word-break:break-word;
+        }
+
+
+        .access-tags {
+
+            line-height:1.8;
+        }
+
+
+        .access-tag {
+
+            display:inline-block;
+
+            background:#e8f1f8;
+
+            color:#005a9e;
+
+            padding:5px 9px;
+
+            margin:3px;
+
+            border-radius:4px;
+
+            font-size:11px;
+        }
+
+
+        .justification {
+
+            background:#f8f9fa;
+
+            border-left:
+                4px solid #0078d4;
+
+            padding:13px;
+
+            line-height:1.5;
+
+            font-size:13px;
+        }
+
+
+        .person {
+
+            display:flex;
+
+            align-items:center;
+
+            gap:12px;
+
+            margin-bottom:10px;
+        }
+
+
+        .person img {
+
+            width:50px;
+
+            height:50px;
+
+            border-radius:50%;
+
+            object-fit:cover;
+
+            background:#edebe9;
+        }
+
+
+        .person-name {
+
+            font-weight:600;
+
+            font-size:14px;
+        }
+
+
+        .person-email {
+
+            color:#605e5c;
+
+            font-size:12px;
+        }
+
+
+        /*
+        ========================================================
+        APPLICATION NAVIGATION
+        ========================================================
+        */
+
+        .pass-app-nav {
+
+            display:flex;
+
+            justify-content:space-between;
+
+            align-items:center;
+
+            gap:15px;
+
+            margin-bottom:18px;
+
+            background:white;
+
+            border:
+                1px solid #edebe9;
+
+            border-radius:9px;
+
+            padding:12px 15px;
+
+            box-shadow:
+                0 2px 6px
+                rgba(0,0,0,.05);
+        }
+
+
+        .pass-app-nav-title {
+
+            font-size:14px;
+
+            font-weight:600;
+
+            color:#323130;
+        }
+
+
+        .pass-app-nav-buttons {
+
+            display:flex;
+
+            gap:8px;
+
+            flex-wrap:wrap;
+        }
+
+
+        .pass-nav-button {
+
+            border:none;
+
+            border-radius:5px;
+
+            padding:9px 14px;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            font-size:13px;
+
+            font-weight:600;
+
+            cursor:pointer;
+
+            background:#f3f2f1;
+
+            color:#323130;
+        }
+
+
+        .pass-nav-button:hover {
+
+            background:#e1dfdd;
+        }
+
+
+        .pass-nav-button-primary {
+
+            background:#0078d4;
+
+            color:white;
+        }
+
+
+        .pass-nav-button-primary:hover {
+
+            background:#106ebe;
+        }
+
+
+        .pass-nav-button-admin {
+
+            background:#003b5c;
+
+            color:white;
+        }
+
+
+        .pass-nav-button-admin:hover {
+
+            background:#002b44;
+        }
+
+
+        /*
+        ========================================================
+        HOME
+        ========================================================
+        */
+
+        .pass-home {
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+        }
+
+
+        .pass-home-header {
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #003b5c,
+                    #0078d4
+                );
+
+            color:white;
+
+            padding:40px;
+
+            border-radius:10px;
+
+            margin-bottom:20px;
+        }
+
+
+        .pass-home-header h1 {
+
+            margin:0;
+
+            font-size:30px;
+
+            font-weight:600;
+        }
+
+
+        .pass-home-header p {
+
+            margin:8px 0 0 0;
+
+            font-size:15px;
+
+            opacity:.9;
+        }
+
+
+        .pass-choice-grid {
+
+            display:grid;
+
+            grid-template-columns:
+                repeat(2, 1fr);
+
+            gap:20px;
+        }
+
+
+        .pass-choice-card {
+
+            background:white;
+
+            border:
+                1px solid #edebe9;
+
+            border-radius:10px;
+
+            padding:30px;
+
+            box-shadow:
+                0 2px 8px
+                rgba(0,0,0,.06);
+
+            cursor:pointer;
+
+            transition:
+                transform .15s,
+                box-shadow .15s,
+                border-color .15s;
+        }
+
+
+        .pass-choice-card:hover {
+
+            transform:
+                translateY(-2px);
+
+            border-color:#0078d4;
+
+            box-shadow:
+                0 5px 15px
+                rgba(0,0,0,.10);
+        }
+
+
+        .pass-choice-icon {
+
+            width:48px;
+
+            height:48px;
+
+            border-radius:50%;
+
+            display:flex;
+
+            align-items:center;
+
+            justify-content:center;
+
+            background:#e8f1f8;
+
+            color:#0078d4;
+
+            font-size:23px;
+
+            margin-bottom:18px;
+        }
+
+
+        .pass-choice-card h2 {
+
+            margin:
+                0 0 8px 0;
+
+            font-size:20px;
+
+            color:#323130;
+        }
+
+
+        .pass-choice-card p {
+
+            margin:0;
+
+            color:#605e5c;
+
+            font-size:14px;
+
+            line-height:1.5;
+        }
+
+
+        /*
+        ========================================================
+        PASS HOLDER USER PICKER
+        ========================================================
+        */
+
+        .pass-user-picker {
+            position: relative;
+        }
+
+
+        .pass-user-results {
+            display: none;
+
+            position: absolute;
+
+            top: 100%;
+            left: 0;
+            right: 0;
+
+            z-index: 1000;
+
+            background: #ffffff;
+
+            border: 1px solid #d0d7de;
+
+            border-radius: 0 0 6px 6px;
+
+            box-shadow:
+                0 4px 12px rgba(0, 0, 0, 0.12);
+
+            max-height: 300px;
+
+            overflow-y: auto;
+        }
+
+
+        .pass-user-result {
+            display: flex;
+
+            align-items: center;
+
+            gap: 12px;
+
+            padding: 12px 14px;
+
+            cursor: pointer;
+
+            border-bottom: 1px solid #eeeeee;
+
+            transition:
+                background-color 0.15s ease;
+        }
+
+
+        .pass-user-result:last-child {
+            border-bottom: none;
+        }
+
+
+        .pass-user-result:hover {
+            background-color: #f3f6f9;
+        }
+
+
+        .pass-user-result-icon {
+            width: 36px;
+            height: 36px;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            background: #e8f1fb;
+
+            border-radius: 50%;
+
+            flex-shrink: 0;
+        }
+
+
+        .pass-user-result-details {
+            min-width: 0;
+        }
+
+
+        .pass-user-result-name {
+            font-weight: 600;
+
+            color: #1f2937;
+
+            font-size: 14px;
+        }
+
+
+        .pass-user-result-email {
+            margin-top: 3px;
+
+            color: #6b7280;
+
+            font-size: 13px;
+
+            overflow: hidden;
+
+            text-overflow: ellipsis;
+
+            white-space: nowrap;
+        }
+
+
+        .pass-user-no-results {
+            padding: 14px;
+
+            color: #6b7280;
+
+            font-size: 14px;
+        }
+
+
+        .pass-user-search-error {
+            padding: 14px;
+
+            color: #b91c1c;
+
+            font-size: 14px;
+        }
+
+
+        /*
+        ========================================================
+        SELECTED USER
+        ========================================================
+        */
+
+        .pass-user-selected {
+            display: none;
+
+            margin-top: 8px;
+        }
+
+
+        .pass-selected-user {
+            display: flex;
+
+            align-items: center;
+
+            gap: 12px;
+
+            padding: 10px 12px;
+
+            background: #f3f7fb;
+
+            border: 1px solid #b8cde3;
+
+            border-radius: 6px;
+        }
+
+
+        .pass-selected-user-icon {
+            width: 38px;
+            height: 38px;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            background: #dceaf7;
+
+            border-radius: 50%;
+
+            flex-shrink: 0;
+        }
+
+
+        .pass-selected-user-details {
+            flex: 1;
+
+            min-width: 0;
+        }
+
+
+        .pass-selected-user-name {
+            font-weight: 600;
+
+            color: #1f2937;
+
+            font-size: 14px;
+        }
+
+
+        .pass-selected-user-email {
+            margin-top: 3px;
+
+            color: #6b7280;
+
+            font-size: 13px;
+        }
+
+
+        .pass-selected-user-remove {
+            width: 30px;
+            height: 30px;
+
+            border: none;
+
+            background: transparent;
+
+            color: #6b7280;
+
+            font-size: 22px;
+
+            line-height: 1;
+
+            cursor: pointer;
+
+            border-radius: 4px;
+        }
+
+
+        .pass-selected-user-remove:hover {
+            background: #e5e7eb;
+
+            color: #111827;
+        }
+
+
+        /*
+        ========================================================
+        FORM
+        ========================================================
+        */
+
+        .pass-form-container {
+
+            background:white;
+
+            border:
+                1px solid #edebe9;
+
+            border-radius:10px;
+
+            padding:28px;
+
+            box-shadow:
+                0 2px 8px
+                rgba(0,0,0,.06);
+        }
+
+
+        .pass-form-header {
+
+            margin-bottom:25px;
+        }
+
+
+        .pass-form-header h1 {
+
+            margin:0;
+
+            font-size:26px;
+
+            color:#003b5c;
+        }
+
+
+        .pass-form-header p {
+
+            margin:
+                6px 0 0 0;
+
+            color:#605e5c;
+
+            font-size:14px;
+        }
+
+
+        .pass-form-grid {
+
+            display:grid;
+
+            grid-template-columns:
+                1fr 1fr;
+
+            gap:18px;
+        }
+
+
+        .pass-form-field {
+
+            display:flex;
+
+            flex-direction:column;
+
+            gap:6px;
+        }
+
+
+        .pass-form-field-full {
+
+            grid-column:
+                1 / -1;
+        }
+
+
+        .pass-form-label {
+
+            font-size:13px;
+
+            font-weight:600;
+
+            color:#323130;
+        }
+
+
+        .pass-form-required {
+
+            color:#a4262c;
+        }
+
+
+        .pass-form-input,
+        .pass-form-select,
+        .pass-form-textarea {
+
+            width:100%;
+
+            padding:
+                10px 12px;
+
+            border:
+                1px solid #8a8886;
+
+            border-radius:5px;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            font-size:14px;
+
+            color:#323130;
+
+            background:white;
+        }
+
+
+        /*
+        --------------------------------------------------------
+        MULTI-SELECT ACCESS DROPDOWN
+        --------------------------------------------------------
+        */
+
+        .pass-access-select {
+
+            min-height:130px;
+
+            padding:6px 8px;
+
+            cursor:pointer;
+        }
+
+
+        .pass-access-select:disabled {
+
+            background:#f3f2f1;
+
+            color:#a19f9d;
+
+            cursor:not-allowed;
+        }
+
+
+        .pass-access-select option {
+
+            padding:7px 8px;
+        }
+
+
+        .pass-access-select option:checked {
+
+            background:#0078d4;
+
+            color:white;
+        }
+
+
+        .pass-form-input:focus,
+        .pass-form-select:focus,
+        .pass-form-textarea:focus {
+
+            outline:none;
+
+            border-color:#0078d4;
+
+            box-shadow:
+                0 0 0 1px #0078d4;
+        }
+
+
+        .pass-form-textarea {
+
+            min-height:110px;
+
+            resize:vertical;
+        }
+
+
+        .pass-form-help {
+
+            font-size:11px;
+
+            color:#605e5c;
+        }
+
+
+        /*
+        ========================================================
+        ATTACHMENT UPLOAD
+        ========================================================
+        */
+
+        .pass-attachment-wrapper {
+
+            width:100%;
+        }
+
+
+        .pass-attachment-input {
+
+            width:100%;
+
+            padding:9px 10px;
+
+            border:
+                1px dashed #8a8886;
+
+            border-radius:6px;
+
+            background:#faf9f8;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            font-size:13px;
+
+            color:#323130;
+
+            cursor:pointer;
+        }
+
+
+        .pass-attachment-input:hover {
+
+            border-color:#0078d4;
+
+            background:#f5f9fc;
+        }
+
+
+        .pass-attachment-input:focus {
+
+            outline:none;
+
+            border-color:#0078d4;
+
+            box-shadow:
+                0 0 0 1px #0078d4;
+        }
+
+
+        .pass-attachment-selected {
+
+            display:none;
+
+            margin-top:8px;
+
+            padding:9px 11px;
+
+            background:#f3f7fb;
+
+            border:
+                1px solid #b8cde3;
+
+            border-radius:6px;
+
+            align-items:center;
+
+            gap:10px;
+        }
+
+
+        .pass-attachment-selected-icon {
+
+            width:32px;
+
+            height:32px;
+
+            display:flex;
+
+            align-items:center;
+
+            justify-content:center;
+
+            background:#dceaf7;
+
+            border-radius:5px;
+
+            flex-shrink:0;
+
+            font-size:16px;
+        }
+
+
+        .pass-attachment-selected-details {
+
+            flex:1;
+
+            min-width:0;
+        }
+
+
+        .pass-attachment-selected-name {
+
+            font-size:13px;
+
+            font-weight:600;
+
+            color:#323130;
+
+            overflow:hidden;
+
+            text-overflow:ellipsis;
+
+            white-space:nowrap;
+        }
+
+
+        .pass-attachment-selected-size {
+
+            margin-top:2px;
+
+            font-size:11px;
+
+            color:#605e5c;
+        }
+
+
+        .pass-attachment-remove {
+
+            width:30px;
+
+            height:30px;
+
+            border:none;
+
+            background:transparent;
+
+            color:#6b7280;
+
+            font-size:20px;
+
+            line-height:1;
+
+            cursor:pointer;
+
+            border-radius:4px;
+
+            flex-shrink:0;
+        }
+
+
+        .pass-attachment-remove:hover {
+
+            background:#e5e7eb;
+
+            color:#111827;
+        }
+
+
+        .pass-attachment-error {
+
+            display:none;
+
+            margin-top:6px;
+
+            color:#a4262c;
+
+            font-size:12px;
+
+            line-height:1.4;
+        }
+
+
+        .pass-attachment-uploading {
+
+            display:none;
+
+            margin-top:8px;
+
+            padding:9px 11px;
+
+            background:#f3f7fb;
+
+            border-left:
+                4px solid #0078d4;
+
+            border-radius:4px;
+
+            color:#005a9e;
+
+            font-size:12px;
+
+            font-weight:600;
+        }
+
+
+        .pass-form-actions {
+
+            display:flex;
+
+            justify-content:flex-end;
+
+            gap:10px;
+
+            margin-top:25px;
+
+            padding-top:20px;
+
+            border-top:
+                1px solid #edebe9;
+        }
+
+
+        .pass-form-button {
+
+            border:none;
+
+            border-radius:5px;
+
+            padding:11px 20px;
+
+            font-family:
+                "Segoe UI",
+                Arial,
+                sans-serif;
+
+            font-size:14px;
+
+            font-weight:600;
+
+            cursor:pointer;
+        }
+
+
+        .pass-form-cancel {
+
+            background:#f3f2f1;
+
+            color:#323130;
+        }
+
+
+        .pass-form-submit {
+
+            background:#0078d4;
+
+            color:white;
+        }
+
+
+        .pass-form-submit:hover {
+
+            background:#106ebe;
+        }
+
+
+        .pass-form-submit:disabled {
+
+            background:#c8c6c4;
+
+            cursor:not-allowed;
+        }
+
+
+        .pass-form-message {
+
+            display:none;
+
+            padding:
+                14px 16px;
+
+            border-radius:6px;
+
+            margin-bottom:20px;
+
+            font-size:13px;
+        }
+
+
+        .pass-form-message-success {
+
+            display:block;
+
+            background:#dff6dd;
+
+            color:#107c10;
+
+            border-left:
+                4px solid #107c10;
+        }
+
+
+        .pass-form-message-error {
+
+            display:block;
+
+            background:#fde7e9;
+
+            color:#a4262c;
+
+            border-left:
+                4px solid #a4262c;
+        }
+
+
+        .pass-site-loading {
+
+            color:#605e5c;
+
+            font-size:12px;
+
+            padding:
+                4px 0;
+        }
+
+
+        .pass-site-error {
+
+            color:#a4262c;
+
+            font-size:12px;
+
+            padding:
+                4px 0;
+        }
+
+
+        @media (max-width:900px) {
+
+            .summary-grid {
+
+                grid-template-columns:
+                    repeat(2,1fr);
+            }
+
+
+            .controls {
+
+                flex-wrap:wrap;
+            }
+
+
+            .search-box {
+
+                flex-basis:100%;
+            }
+
+
+            .table-container {
+
+                overflow-x:auto;
+            }
+
+
+            .pass-table {
+
+                min-width:800px;
+            }
+
+
+            .detail-grid {
+
+                grid-template-columns:1fr;
+            }
+
+
+            .detail-section-full {
+
+                grid-column:auto;
+            }
+
+        }
+
+
+        @media (max-width:700px) {
+
+            .pass-choice-grid {
+
+                grid-template-columns:1fr;
+            }
+
+
+            .pass-form-grid {
+
+                grid-template-columns:1fr;
+            }
+
+
+            .pass-form-field-full {
+
+                grid-column:auto;
+            }
+
+
+            .pass-home-header {
+
+                padding:28px;
+            }
+
+
+            .pass-form-container {
+
+                padding:20px;
+            }
+
+        }
+
+
+        @media (max-width:550px) {
+
+            .summary-grid {
+
+                grid-template-columns:1fr;
+            }
+
+
+            .dashboard-header h1 {
+
+                font-size:22px;
+            }
+
+        }
+
+    `;
+
+
+    document.head.appendChild(style);
+
+
     /*
     ============================================================
     APPLICATION NAVIGATION
@@ -1294,7 +3416,7 @@
             <div class="pass-app-nav">
 
                 <div class="pass-app-nav-title">
-                    Access Pass Management
+                    Building Pass Request Solution
                 </div>
 
                 <div class="pass-app-nav-buttons">
@@ -1355,11 +3477,11 @@
                 <div class="pass-home-header">
 
                     <h1>
-                        Access Pass Management
+                        Building Pass Request Solution
                     </h1>
 
                     <p>
-                        Submit a new access pass request or
+                        Submit a new Building Pass Request or
                         view the reporting dashboard.
                     </p>
 
@@ -1383,7 +3505,7 @@
                         </h2>
 
                         <p>
-                            Complete the access pass request
+                            Complete the Building Pass Request
                             form and submit it directly to the
                             Building Pass register.
                         </p>
@@ -1547,12 +3669,12 @@
                     <div class="pass-form-header">
 
                         <h1>
-                            Submit Access Pass Request
+                            Submit Building Pass Request
                         </h1>
 
                         <p>
                             Please provide the details required
-                            for the access pass request.
+                            for the Building Pass Request. Please note, Building Pass Requests can be submitted for yourself, but will be subject to an approval by your Line Manager, or alternatively your Line Manager can submit on your behalf.
                         </p>
 
                     </div>
@@ -1583,52 +3705,111 @@
             <option value="no">No</option>
         </select>
     </div>
-</div>
-<br>
-<div class="pass-form-grid">
+    
                             <div class="pass-form-field">
 
                                 <label class="pass-form-label">
 
-                                    Pass Holder
-                                    <span class="pass-form-required">*</span>
+                                    Pass Requester
 
                                 </label>
 
-
-                                <div
-                                    class="pass-user-picker"
-                                    id="passHolderPicker"
+                                <input
+                                    type="text"
+                                    id="formPassRequester"
+                                    class="pass-form-input"
+                                    readonly
                                 >
 
-                                    <input
-                                        type="text"
-                                        id="formPassHolderSearch"
-                                        class="pass-form-input"
-                                        placeholder="Start typing a name..."
-                                        autocomplete="off"
-                                    >
+                                <div class="pass-form-help">
 
-
-                                    <div
-                                        id="passHolderResults"
-                                        class="pass-user-results"
-                                    ></div>
-
-
-                                    <div
-                                        id="passHolderSelected"
-                                        class="pass-user-selected"
-                                    ></div>
-
-
-                                    <input
-                                        type="hidden"
-                                        id="formPassHolder"
-                                        value=""
-                                    >
+                                    The request will be associated
+                                    with your current SharePoint account.
 
                                 </div>
+
+                            </div>
+    </div>
+    <br>
+
+<div class="pass-form-grid">
+    <div class="pass-form-field">
+
+        <label class="pass-form-label">
+            Pass Holder
+            <span class="pass-form-required">*</span>
+        </label>
+
+        <div class="pass-holder-type-toggle">
+
+    <button
+        type="button"
+        id="passHolderEmployeeBtn"
+        class="pass-holder-type-btn active"
+    >
+        Employee
+    </button>
+
+    <button
+        type="button"
+        id="passHolderContractorBtn"
+        class="pass-holder-type-btn"
+    >
+        Contractor
+    </button>
+
+
+
+
+
+        <div
+            class="pass-user-picker"
+            id="passHolderPicker"
+        >
+
+            <input
+                type="text"
+                id="formPassHolderSearch"
+                class="pass-form-input"
+                placeholder="Start typing a name..."
+                autocomplete="off"
+            >
+
+
+            <div
+                id="passHolderResults"
+                class="pass-user-results"
+            ></div>
+
+
+            <div
+                id="passHolderSelected"
+                class="pass-user-selected"
+            ></div>
+
+
+            <input
+                type="hidden"
+                id="formPassHolder"
+                value=""
+            >
+
+            <!-- Employee / Contractor -->
+            <input
+                type="hidden"
+                id="formPassHolderType"
+                value="employee"
+            >
+
+        </div>
+
+    </div>
+
+
+                                
+
+
+
 
 
                                 <div class="pass-form-help">
@@ -1728,7 +3909,73 @@
     >
 </div>
 
+</div>
+<br>
 
+                            <!--
+                            ====================================================
+                            PDF ATTACHMENT
+                            ====================================================
+                            -->
+<div class="pass-form-grid">
+
+                            <div
+                                class="pass-form-field pass-form-field-full" id="formAttachmentFull"
+                            >
+
+                                <label class="pass-form-label">
+
+                                    Optional supporting document (PDF)
+
+                                </label>
+
+
+                                <div class="pass-attachment-wrapper">
+
+                                    <input
+                                        type="file"
+                                        id="formAttachmentPdf"
+                                        class="pass-attachment-input"
+                                        accept=".pdf,application/pdf"
+                                    >
+
+
+                                    <div
+                                        class="pass-form-help"
+                                    >
+
+                                        Optional. PDF only.
+                                        Maximum file size: 10 MB.
+
+                                    </div>
+
+
+                                    <div
+                                        id="passAttachmentPdfError"
+                                        class="pass-attachment-error"
+                                    ></div>
+
+
+                                    <div
+                                        id="passAttachmentPdfSelected"
+                                        class="pass-attachment-selected"
+                                    ></div>
+
+
+                                    <div
+                                        id="passAttachmentPdfUploading"
+                                        class="pass-attachment-uploading"
+                                    >
+                                        Uploading attachment...
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+</div>
+<br>
+<div class="pass-form-grid">
                             <div class="pass-form-field">
 
                                 <label class="pass-form-label">
@@ -1765,29 +4012,6 @@
                             </div>
 
 
-                            <div class="pass-form-field">
-
-                                <label class="pass-form-label">
-
-                                    Pass Requester
-
-                                </label>
-
-                                <input
-                                    type="text"
-                                    id="formPassRequester"
-                                    class="pass-form-input"
-                                    readonly
-                                >
-
-                                <div class="pass-form-help">
-
-                                    The request will be associated
-                                    with your current SharePoint account.
-
-                                </div>
-
-                            </div>
 
 
                             <div class="pass-form-field">
@@ -1866,9 +4090,8 @@
                                     <input
                                         type="file"
                                         id="formAttachment"
-                                        multiple
                                         class="pass-attachment-input"
-                                        accept=".jpg,.jpeg,.png,image/jpeg,image/png,.pdf"
+                                        accept=".jpg,.jpeg,.png,image/jpeg,image/png"
                                     >
 
 
@@ -1905,6 +4128,9 @@
                                 </div>
 
                             </div>
+
+
+
 
 
                         </div>
@@ -1982,16 +4208,17 @@ const newStarterSelect = document.getElementById("formNewStarter");
 const clearanceSelect = document.getElementById("formClearance");
 const nationalInsuranceField = document.getElementById("nationalInsuranceField");
 const nationalInsuranceInput = document.getElementById("formNationalInsurance");
+const attachmentPdfField = document.getElementById("formAttachmentPdf");
+const attachmentPdfField1 = document.getElementById("formAttachmentFull");
 
 function updateNationalInsuranceVisibility() {
     const isNewStarter = newStarterSelect.value === "yes";
-
     const clearance = clearanceSelect.value;
 
     const clearanceRequiresNI = ["CTC", "SC", "DV"].includes(clearance);
-
     const shouldShowNI = isNewStarter && clearanceRequiresNI;
 
+    // Show/hide National Insurance field
     if (shouldShowNI) {
         nationalInsuranceField.style.display = "";
         nationalInsuranceInput.required = true;
@@ -2000,6 +4227,13 @@ function updateNationalInsuranceVisibility() {
         nationalInsuranceInput.required = false;
         nationalInsuranceInput.value = "";
     }
+
+    // Show/hide Attachment PDF field
+    if (shouldShowNI) {
+        attachmentPdfField1.style.display = "";
+    } else {
+        attachmentPdfField1.style.display = "none";
+    }
 }
 
 newStarterSelect.addEventListener("change", updateNationalInsuranceVisibility);
@@ -2007,6 +4241,8 @@ clearanceSelect.addEventListener("change", updateNationalInsuranceVisibility);
 
 // Set the correct initial state
 updateNationalInsuranceVisibility();
+
+
 
         /*
         --------------------------------------------------------
@@ -2024,61 +4260,96 @@ updateNationalInsuranceVisibility();
             );
 
 
-        if (passHolderSearch) {
+if (passHolderSearch) {
 
-            passHolderSearch.addEventListener(
-                "input",
-                function () {
+    passHolderSearch.addEventListener(
+        "input",
+        function () {
 
-                    var searchText =
-                        this.value.trim();
-
-
-                    if (
-                        selectedPassHolder
-                    ) {
-
-                        selectedPassHolder =
-                            null;
+            var searchText =
+                this.value.trim();
 
 
-                        var hiddenField =
-                            document.getElementById(
-                                "formPassHolder"
-                            );
+            /*
+            ------------------------------------------------
+            CONTRACTOR MODE
+            ------------------------------------------------
+            */
+
+            if (passHolderType === "contractor") {
+
+                var hiddenField =
+                    document.getElementById(
+                        "formPassHolder"
+                    );
+
+                if (hiddenField) {
+
+                    hiddenField.value =
+                        searchText;
+
+                }
+
+                return;
+            }
 
 
-                        if (hiddenField) {
+            /*
+            ------------------------------------------------
+            EXISTING EMPLOYEE / ENTRA LOGIC
+            ------------------------------------------------
+            */
 
-                            hiddenField.value =
-                                "";
+            if (
+                selectedPassHolder
+            ) {
 
-                        }
+                selectedPassHolder =
+                    null;
 
-                    }
 
-
-                    clearTimeout(
-                        passHolderSearchTimer
+                var hiddenField =
+                    document.getElementById(
+                        "formPassHolder"
                     );
 
 
-                    passHolderSearchTimer =
-                        setTimeout(
-                            function () {
+                if (hiddenField) {
 
-                                searchPassHolders(
-                                    searchText
-                                );
-
-                            },
-                            300
-                        );
+                    hiddenField.value =
+                        "";
 
                 }
+
+            }
+
+
+            clearTimeout(
+                passHolderSearchTimer
             );
 
+
+            passHolderSearchTimer =
+                setTimeout(
+                    function () {
+
+                        searchPassHolders(
+                            searchText
+                        );
+
+                    },
+                    300
+                );
+
         }
+    );
+
+}
+
+
+
+
+        
 
 
         /*
@@ -2149,6 +4420,34 @@ updateNationalInsuranceVisibility();
         }
 
 
+        /*
+        --------------------------------------------------------
+        PDF ATTACHMENT FILE INPUT
+        --------------------------------------------------------
+        */
+
+        var attachmentPdfInput =
+            document.getElementById(
+                "formAttachmentPdf"
+            );
+
+
+        if (attachmentPdfInput) {
+
+            attachmentPdfInput.addEventListener(
+                "change",
+                function () {
+
+                    validateAndDisplayPdfAttachment(
+                        this
+                    );
+
+                }
+            );
+
+        }
+
+
         document
             .getElementById(
                 "passFormCancel"
@@ -2182,6 +4481,184 @@ updateNationalInsuranceVisibility();
             );
 
     }
+
+
+/*
+============================================================
+PASS HOLDER TYPE
+============================================================
+*/
+
+var passHolderType = "employee";
+
+
+var employeeButton =
+    document.getElementById(
+        "passHolderEmployeeBtn"
+    );
+
+
+var contractorButton =
+    document.getElementById(
+        "passHolderContractorBtn"
+    );
+
+
+if (employeeButton) {
+
+    employeeButton.addEventListener(
+        "click",
+        function () {
+
+            setPassHolderType("employee");
+
+        }
+    );
+
+}
+
+
+if (contractorButton) {
+
+    contractorButton.addEventListener(
+        "click",
+        function () {
+
+            setPassHolderType("contractor");
+
+        }
+    );
+
+}
+
+
+function setPassHolderType(type) {
+
+    passHolderType = type;
+
+
+    var typeField =
+        document.getElementById(
+            "formPassHolderType"
+        );
+
+
+    var searchInput =
+        document.getElementById(
+            "formPassHolderSearch"
+        );
+
+
+    var employeeButton =
+        document.getElementById(
+            "passHolderEmployeeBtn"
+        );
+
+
+    var contractorButton =
+        document.getElementById(
+            "passHolderContractorBtn"
+        );
+
+
+    /*
+    --------------------------------------------------------
+    Clear whatever was previously selected
+    --------------------------------------------------------
+    */
+
+    clearPassHolder();
+
+
+    /*
+    --------------------------------------------------------
+    Store the type
+    --------------------------------------------------------
+    */
+
+    if (typeField) {
+
+        typeField.value =
+            type;
+
+    }
+
+
+    /*
+    --------------------------------------------------------
+    Update buttons
+    --------------------------------------------------------
+    */
+
+    if (employeeButton) {
+
+        employeeButton.classList.toggle(
+            "active",
+            type === "employee"
+        );
+
+    }
+
+
+    if (contractorButton) {
+
+        contractorButton.classList.toggle(
+            "active",
+            type === "contractor"
+        );
+
+    }
+
+
+    /*
+    --------------------------------------------------------
+    CONTRACTOR
+    --------------------------------------------------------
+    */
+
+    if (type === "contractor") {
+
+        if (searchInput) {
+
+            searchInput.placeholder =
+                "Enter contractor name...";
+
+            searchInput.value =
+                "";
+
+            searchInput.style.display =
+                "block";
+
+        }
+
+    }
+
+
+    /*
+    --------------------------------------------------------
+    EMPLOYEE
+    --------------------------------------------------------
+    */
+
+    else {
+
+        if (searchInput) {
+
+            searchInput.placeholder =
+                "Start typing a name...";
+
+            searchInput.value =
+                "";
+
+            searchInput.style.display =
+                "block";
+
+        }
+
+    }
+
+}
+
 
 
     /*
@@ -2426,6 +4903,279 @@ function validateAndDisplayAttachment(input) {
 
 
         showAttachmentError("");
+
+    }
+
+
+    /*
+    ============================================================
+    PDF ATTACHMENT HELPERS
+    ============================================================
+
+    Mirrors validateAndDisplayAttachment / clearAttachment above,
+    but targets the dedicated PDF file input and its own
+    error / selected-file / uploading containers so the two
+    upload widgets do not interfere with each other.
+    ============================================================
+    */
+
+    function showPdfAttachmentError(message) {
+
+        var errorContainer =
+            document.getElementById(
+                "passAttachmentPdfError"
+            );
+
+
+        if (!errorContainer) {
+
+            return;
+
+        }
+
+
+        errorContainer.textContent =
+            message ||
+            "";
+
+
+        errorContainer.style.display =
+            message
+                ? "block"
+                : "none";
+
+    }
+
+
+    function validateAndDisplayPdfAttachment(input) {
+
+        var selectedContainer =
+            document.getElementById(
+                "passAttachmentPdfSelected"
+            );
+
+        showPdfAttachmentError("");
+
+        if (
+            !input ||
+            !input.files ||
+            input.files.length === 0
+        ) {
+
+            if (selectedContainer) {
+
+                selectedContainer.innerHTML = "";
+                selectedContainer.style.display = "none";
+
+            }
+
+            return [];
+
+        }
+
+
+        /*
+        ------------------------------------------------------------
+        Only one PDF may be attached via this input.
+        ------------------------------------------------------------
+        */
+
+        if (input.files.length > 1) {
+
+            input.value = "";
+
+            if (selectedContainer) {
+
+                selectedContainer.innerHTML = "";
+                selectedContainer.style.display = "none";
+
+            }
+
+            showPdfAttachmentError(
+                "You can upload a maximum of 1 PDF file."
+            );
+
+            return [];
+
+        }
+
+
+        var files = Array.from(input.files);
+
+
+        /*
+        ------------------------------------------------------------
+        Validate the selected file (size, type, extension).
+        ------------------------------------------------------------
+        */
+
+        for (var i = 0; i < files.length; i++) {
+
+            var validation =
+                validateAttachmentFile(
+                    files[i]
+                );
+
+
+            if (!validation.valid) {
+
+                input.value = "";
+
+                if (selectedContainer) {
+
+                    selectedContainer.innerHTML = "";
+                    selectedContainer.style.display = "none";
+
+                }
+
+                showPdfAttachmentError(
+                    files[i].name +
+                    ": " +
+                    validation.message
+                );
+
+                return [];
+
+            }
+
+        }
+
+
+        /*
+        ------------------------------------------------------------
+        Display the selected file
+        ------------------------------------------------------------
+        */
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML = "";
+
+
+            files.forEach(
+                function (file, index) {
+
+                    var fileElement =
+                        document.createElement("div");
+
+                    fileElement.className =
+                        "pass-attachment-selected";
+
+
+                    fileElement.innerHTML = `
+
+                        <div class="pass-attachment-selected-icon">
+                            📎
+                        </div>
+
+                        <div class="pass-attachment-selected-details">
+
+                            <div class="pass-attachment-selected-name">
+                                ${escapeHtml(file.name)}
+                            </div>
+
+                            <div class="pass-attachment-selected-size">
+                                ${formatFileSize(file.size)}
+                            </div>
+
+                        </div>
+
+                    `;
+
+
+                    selectedContainer.appendChild(
+                        fileElement
+                    );
+
+                }
+            );
+
+
+            var removeButton =
+                document.createElement("button");
+
+            removeButton.type = "button";
+            removeButton.className =
+                "pass-attachment-remove";
+            removeButton.title =
+                "Remove attachment";
+            removeButton.textContent = "×";
+
+
+            removeButton.addEventListener(
+                "click",
+                function () {
+
+                    clearPdfAttachment();
+
+                }
+            );
+
+
+            selectedContainer.appendChild(
+                removeButton
+            );
+
+
+            selectedContainer.style.display =
+                "flex";
+
+        }
+
+
+        return files;
+
+    }
+
+
+    function clearPdfAttachment() {
+
+        var input =
+            document.getElementById(
+                "formAttachmentPdf"
+            );
+
+
+        var selectedContainer =
+            document.getElementById(
+                "passAttachmentPdfSelected"
+            );
+
+
+        var uploadingContainer =
+            document.getElementById(
+                "passAttachmentPdfUploading"
+            );
+
+
+        if (input) {
+
+            input.value =
+                "";
+
+        }
+
+
+        if (selectedContainer) {
+
+            selectedContainer.innerHTML =
+                "";
+
+            selectedContainer.style.display =
+                "none";
+
+        }
+
+
+        if (uploadingContainer) {
+
+            uploadingContainer.style.display =
+                "none";
+
+        }
+
+
+        showPdfAttachmentError("");
 
     }
 
@@ -3586,6 +6336,12 @@ var attachmentInput =
     );
 
 
+var attachmentPdfInput =
+    document.getElementById(
+        "formAttachmentPdf"
+    );
+
+
 var attachmentFiles =
     [];
 
@@ -3597,8 +6353,34 @@ if (
 ) {
 
     attachmentFiles =
-        Array.from(
-            attachmentInput.files
+        attachmentFiles.concat(
+            Array.from(
+                attachmentInput.files
+            )
+        );
+
+}
+
+
+/*
+--------------------------------------------------------
+Add any file selected via the dedicated PDF input so
+that BOTH the image and the PDF are uploaded to the
+same SharePoint item's Attachments column.
+--------------------------------------------------------
+*/
+
+if (
+    attachmentPdfInput &&
+    attachmentPdfInput.files &&
+    attachmentPdfInput.files.length > 0
+) {
+
+    attachmentFiles =
+        attachmentFiles.concat(
+            Array.from(
+                attachmentPdfInput.files
+            )
         );
 
 }
@@ -3612,13 +6394,7 @@ VALIDATE ATTACHMENTS
 
 /*
 --------------------------------------------------------
-Maximum 2 files
---------------------------------------------------------
-*/
-
-/*
---------------------------------------------------------
-Maximum 2 files
+Maximum 2 files (1 image + 1 PDF)
 --------------------------------------------------------
 */
 
@@ -3729,9 +6505,23 @@ if (
             );
 
 
+        var uploadingPdfContainer =
+            document.getElementById(
+                "passAttachmentPdfUploading"
+            );
+
+
         if (uploadingContainer) {
 
             uploadingContainer.style.display =
+                "none";
+
+        }
+
+
+        if (uploadingPdfContainer) {
+
+            uploadingPdfContainer.style.display =
                 "none";
 
         }
@@ -3938,6 +6728,17 @@ if (uploadingContainer) {
 }
 
 
+if (uploadingPdfContainer) {
+
+    uploadingPdfContainer.style.display =
+        "block";
+
+    uploadingPdfContainer.textContent =
+        "Uploading attachments...";
+
+}
+
+
 submitButton.textContent =
     "Uploading attachments...";
 
@@ -3967,6 +6768,18 @@ return attachmentFiles
                     }
 
 
+                    if (uploadingPdfContainer) {
+
+                        uploadingPdfContainer.textContent =
+                            "Uploading attachment " +
+                            (index + 1) +
+                            " of " +
+                            attachmentFiles.length +
+                            "...";
+
+                    }
+
+
                     return uploadAttachmentToItem(
                         itemId,
                         file,
@@ -3985,6 +6798,21 @@ return attachmentFiles
             if (uploadingContainer) {
 
                 uploadingContainer.textContent =
+                    attachmentFiles.length +
+                    " attachment" +
+                    (
+                        attachmentFiles.length === 1
+                            ? ""
+                            : "s"
+                    ) +
+                    " uploaded successfully.";
+
+            }
+
+
+            if (uploadingPdfContainer) {
+
+                uploadingPdfContainer.textContent =
                     attachmentFiles.length +
                     " attachment" +
                     (
@@ -4067,7 +6895,7 @@ if (
     message.innerHTML =
         "<strong>Request submitted successfully.</strong>" +
         "<br>" +
-        "The access pass request has been added to the register and " +
+        "The Building Pass Request has been added to the register and " +
         attachmentCount +
         " attachment" +
         (
@@ -4083,7 +6911,7 @@ if (
                     message.innerHTML =
                         "<strong>Request submitted successfully.</strong>" +
                         "<br>" +
-                        "The access pass request has been added to the register.";
+                        "The Building Pass Request has been added to the register.";
 
                 }
 
@@ -4099,6 +6927,9 @@ if (
 
 
                 clearAttachment();
+
+
+                clearPdfAttachment();
 
 
                 var requesterField =
@@ -4174,6 +7005,14 @@ if (
                 if (uploadingContainer) {
 
                     uploadingContainer.style.display =
+                        "none";
+
+                }
+
+
+                if (uploadingPdfContainer) {
+
+                    uploadingPdfContainer.style.display =
                         "none";
 
                 }
@@ -4405,7 +7244,7 @@ if (
                     ${
                         adminMode
                             ? "Admin Dashboard"
-                            : "Access Pass Dashboard"
+                            : "Building Pass Request Dashboard"
                     }
 
                 </h1>
@@ -4415,8 +7254,8 @@ if (
 
                     ${
                         adminMode
-                            ? "All access pass requests"
-                            : "Your access pass requests"
+                            ? "All Building Pass Request"
+                            : "Your Building Pass Request"
                     }
 
                 </p>
@@ -4718,6 +7557,97 @@ if (
 
     }
 
+var employeeButton =
+    document.getElementById(
+        "passHolderEmployeeBtn"
+    );
+
+var contractorButton =
+    document.getElementById(
+        "passHolderContractorBtn"
+    );
+
+
+if (employeeButton) {
+
+    employeeButton.addEventListener(
+        "click",
+        function () {
+
+            setPassHolderType("employee");
+
+        }
+    );
+
+}
+
+
+if (contractorButton) {
+
+    contractorButton.addEventListener(
+        "click",
+        function () {
+
+            setPassHolderType("contractor");
+
+        }
+    );
+
+}
+
+
+function setPassHolderType(type) {
+
+    passHolderType = type;
+
+
+    // Clear existing employee/contractor value
+    clearPassHolder();
+
+
+    var searchInput =
+        document.getElementById(
+            "formPassHolderSearch"
+        );
+
+
+    if (employeeButton) {
+
+        employeeButton.classList.toggle(
+            "active",
+            type === "employee"
+        );
+
+    }
+
+
+    if (contractorButton) {
+
+        contractorButton.classList.toggle(
+            "active",
+            type === "contractor"
+        );
+
+    }
+
+
+    if (searchInput) {
+
+        if (type === "contractor") {
+
+            searchInput.placeholder =
+                "Enter contractor name...";
+
+        } else {
+
+            searchInput.placeholder =
+                "Start typing a name...";
+
+        }
+
+    }
+
+}
 
     /*
     ============================================================
@@ -4823,7 +7753,13 @@ if (
 
                         <th>Expiry</th>
 
-                        <th>Status</th>
+<th>Status</th>
+
+${
+    adminMode
+        ? "<th>Action</th>"
+        : ""
+}
 
                     </tr>
 
@@ -4887,26 +7823,66 @@ if (
                                     </td>
 
 
-                                    <td>
+<td>
 
-                                        ${formatDate(record.Expiry_Date)}
+    ${formatDate(record.Expiry_Date)}
 
-                                        <div class="${expiry.className}">
-                                            ${escapeHtml(expiry.label)}
-                                        </div>
+    <div class="${expiry.className}">
+        ${escapeHtml(expiry.label)}
+    </div>
 
-                                    </td>
+</td>
 
 
-                                    <td>
+<td>
 
-                                        <span
-                                            class="status-pill ${status.className}"
-                                        >
-                                            ${escapeHtml(status.label)}
-                                        </span>
+    <span
+        class="status-pill ${status.className}"
+    >
+        ${escapeHtml(status.label)} -
+        ${escapeHtml(status.description)}
+    </span>
+<!--
+    ${
+        adminMode &&
+        String(record.Status || "").trim() === "Pass with Front Desk Security"
+        ?
+        `
+            <button
+                type="button"
+                class="issue-pass-button"
+                data-issue-pass-id="${escapeHtml(record.ID)}"
+            >
+                Issue Pass
+            </button>
+        `
+        :
+        ""
+    }
+-->
+</td>
 
-                                    </td>
+${
+                                        adminMode &&
+                                                String(record.Status || "").trim() === "Pass with Front Desk Security"
+        
+                                        ?
+                                        `
+                                            <td>
+                                                            <button
+                type="button"
+                class="issue-pass-button"
+                data-issue-pass-id="${escapeHtml(record.ID)}"
+            >
+                Issue Pass
+            </button>
+            '
+                                            </td>
+                                        `
+                                        :
+                                        ""
+                                    }
+
 
                                 </tr>
 
@@ -4924,63 +7900,367 @@ if (
     }
 
 
-    /*
+/*
     ============================================================
     BIND TABLE ROWS
     ============================================================
     */
 
-    function bindTableRows() {
+function bindTableRows() {
 
-        var rows =
-            dashboard.querySelectorAll(
-                "#passTableContainer tbody tr"
+    var rows =
+        dashboard.querySelectorAll(
+            "#passTableContainer tbody tr"
+        );
+
+
+    rows.forEach(
+        function (row) {
+
+            // ----------------------------------------------------
+            // Row click - open details
+            // ----------------------------------------------------
+
+            row.addEventListener(
+                "click",
+                function (event) {
+
+                    // Don't open the details panel when the
+                    // Issue Pass button has been clicked.
+                    if (
+                        event.target.closest(
+                            ".issue-pass-button"
+                        )
+                    ) {
+                        return;
+                    }
+
+
+                    var id =
+                        this.getAttribute(
+                            "data-record-id"
+                        );
+
+
+                    var record =
+                        data.find(
+                            function (item) {
+
+                                return String(
+                                    item.ID
+                                ) ===
+                                String(id);
+
+                            }
+                        );
+
+
+                    if (record) {
+
+                        showDetails(
+                            record
+                        );
+
+                    }
+
+                }
             );
 
 
-        rows.forEach(
-            function (row) {
+            // ----------------------------------------------------
+            // Issue Pass button
+            // ----------------------------------------------------
 
-                row.addEventListener(
+            var issueButton =
+                row.querySelector(
+                    ".issue-pass-button"
+                );
+
+
+            if (issueButton) {
+
+                issueButton.addEventListener(
                     "click",
-                    function () {
+                    function (event) {
+
+                        event.stopPropagation();
+
 
                         var id =
                             this.getAttribute(
-                                "data-record-id"
+                                "data-issue-pass-id"
                             );
 
 
-                        var record =
-                            data.find(
-                                function (item) {
-
-                                    return String(
-                                        item.ID
-                                    ) ===
-                                    String(id);
-
-                                }
-                            );
-
-
-                        if (record) {
-
-                            showDetails(
-                                record
-                            );
-
-                        }
+                        issuePass(id);
 
                     }
                 );
 
             }
+
+        }
+    );
+
+}
+
+/*
+============================================================
+ISSUE PASS
+============================================================
+*/
+
+async function issuePass(itemId) {
+
+    if (
+        !confirm(
+            "Are you sure you want to issue this pass?"
+        )
+    ) {
+        return;
+    }
+
+
+    try {
+
+        /*
+        ========================================================
+        GET LOGGED-IN USER
+        ========================================================
+        */
+
+        var currentUserResponse =
+            await fetch(
+                SITE_URL +
+                "/_api/web/currentuser",
+                {
+                    method: "GET",
+
+                    headers: {
+                        "Accept":
+                            "application/json;odata=verbose"
+                    }
+                }
+            );
+
+
+        if (!currentUserResponse.ok) {
+
+            throw new Error(
+                "Unable to identify the logged-in user."
+            );
+
+        }
+
+
+        var currentUserData =
+            await currentUserResponse.json();
+
+
+        var loggedInUser =
+            currentUserData.d.Title ||
+            currentUserData.d.LoginName ||
+            "Unknown user";
+
+
+        /*
+        ========================================================
+        GET REQUEST DIGEST
+        ========================================================
+        */
+
+        var contextResponse =
+            await fetch(
+                SITE_URL +
+                "/_api/contextinfo",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Accept":
+                            "application/json;odata=verbose"
+                    }
+                }
+            );
+
+
+        if (!contextResponse.ok) {
+
+            var contextError =
+                await contextResponse.text();
+
+            console.error(
+                "Context info error:",
+                contextError
+            );
+
+            throw new Error(
+                "Unable to obtain the SharePoint request digest."
+            );
+
+        }
+
+
+        var contextData =
+            await contextResponse.json();
+
+
+        var requestDigest =
+            contextData.d
+                .GetContextWebInformation
+                .FormDigestValue;
+
+
+        /*
+        ========================================================
+        TODAY'S DATE
+        ========================================================
+        */
+
+        var today =
+            new Date();
+
+
+        var day =
+            String(
+                today.getDate()
+            ).padStart(2, "0");
+
+
+        var month =
+            String(
+                today.getMonth() + 1
+            ).padStart(2, "0");
+
+
+        var year =
+            today.getFullYear();
+
+
+        var formattedDate =
+            `${day}/${month}/${year}`;
+
+
+        /*
+        ========================================================
+        NEW STATUS
+        ========================================================
+        */
+
+        var newStatus =
+            `Pass issued (${formattedDate}) by ${loggedInUser}`;
+
+
+        /*
+        ========================================================
+        UPDATE SHAREPOINT ITEM
+        ========================================================
+        */
+
+        var updateResponse =
+            await fetch(
+
+                LIST_API_URL +
+                "(" +
+                itemId +
+                ")",
+
+                {
+                    method: "POST",
+
+                    headers: {
+
+                        "Accept":
+                            "application/json;odata=verbose",
+
+                        "Content-Type":
+                            "application/json;odata=verbose",
+
+                        "X-HTTP-Method":
+                            "MERGE",
+
+                        "IF-MATCH":
+                            "*",
+
+                        "X-RequestDigest":
+                            requestDigest
+
+                    },
+
+                    body: JSON.stringify({
+
+                        "__metadata": {
+
+                            "type":
+                                LIST_ITEM_TYPE
+
+                        },
+
+                        "Status":
+                            newStatus
+
+                    })
+
+                }
+
+            );
+
+
+        /*
+        ========================================================
+        CHECK RESPONSE
+        ========================================================
+        */
+
+        var responseText =
+            await updateResponse.text();
+
+
+        if (!updateResponse.ok) {
+
+            console.error(
+                "SharePoint update failed:",
+                updateResponse.status,
+                responseText
+            );
+
+            throw new Error(
+                `SharePoint returned ${updateResponse.status}: ${responseText}`
+            );
+
+        }
+
+
+        /*
+        ========================================================
+        SUCCESS
+        ========================================================
+        */
+
+        alert(
+            "Pass issued successfully."
+        );
+
+
+        location.reload();
+
+
+    } catch (error) {
+
+        console.error(
+            "Issue Pass error:",
+            error
+        );
+
+
+        alert(
+            "Unable to issue the pass.\n\n" +
+            error.message
         );
 
     }
 
-
+}
     /*
     ============================================================
     DETAILS MODAL
@@ -5169,7 +8449,7 @@ if (
                         <div class="detail-section">
 
                             <div class="detail-section-title">
-                                People
+                                Pass Requester
                             </div>
 
 

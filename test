@@ -20,8 +20,6 @@
 
     var passHolderSearchTimer = null;
 
-    var passHolderType = "employee";
-
 
     /*
     ============================================================
@@ -273,9 +271,13 @@
 
         "chris.townsend@mcga.gov.uk",
 
-        "hqsecuritymanager@mcga.gov.uk", 
+        "hqsecurity.manager@mcga.gov.uk", 
 
-        "frontdesksecurity@mcga.gov.uk"
+        "frontdesksecurity@mcga.gov.uk", 
+
+        "sam.wildridge@mcga.gov.uk", 
+
+        "andrea.towers@mcga.gov.uk"
 
     ];
 
@@ -1502,6 +1504,11 @@ function getStatus(record) {
     white-space: nowrap;
 }
 
+#contractorButton.selected {
+    background-color: green;
+    color: white;
+    border: 2px solid darkgreen;
+}
 
 .issue-pass-button {
     margin-top:5%;
@@ -3647,6 +3654,8 @@ function getStatus(record) {
     ============================================================
     */
 
+    
+
     function renderSubmissionForm() {
 
         dashboard.innerHTML = `
@@ -3691,8 +3700,26 @@ function getStatus(record) {
                         novalidate
                     >
 
+<button
+    type="button"
+    id="contractorButton" class="pass-form-button"
+>
+    Request a pass for a supplier
+</button>
 
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const button = document.getElementById("contractorButton");
+
+    button.addEventListener("click", function() {
+        this.classList.toggle("clicked");
+    });
+});
+</script>
+
+<br><br>
 <div class="pass-form-grid">
+
     <div class="pass-form-field">
         <label class="pass-form-label">
             Are you a new starter?
@@ -3731,81 +3758,52 @@ function getStatus(record) {
                             </div>
     </div>
     <br>
+    <div class="pass-form-grid">
 
-<div class="pass-form-grid">
-    <div class="pass-form-field">
+    
+                            <div class="pass-form-field">
 
-        <label class="pass-form-label">
-            Pass Holder
-            <span class="pass-form-required">*</span>
-        </label>
+                                <label class="pass-form-label">
 
-        <div class="pass-holder-type-toggle">
+                                    Pass Holder
+                                    <span class="pass-form-required">*</span>
 
-    <button
-        type="button"
-        id="passHolderEmployeeBtn"
-        class="pass-holder-type-btn active"
-    >
-        Employee
-    </button>
-
-    <button
-        type="button"
-        id="passHolderContractorBtn"
-        class="pass-holder-type-btn"
-    >
-        Contractor
-    </button>
+                                </label>
 
 
+                                <div
+                                    class="pass-user-picker"
+                                    id="passHolderPicker"
+                                >
+
+                                    <input
+                                        type="text"
+                                        id="formPassHolderSearch"
+                                        class="pass-form-input"
+                                        placeholder="Start typing a name..."
+                                        autocomplete="off"
+                                    >
 
 
-
-        <div
-            class="pass-user-picker"
-            id="passHolderPicker"
-        >
-
-            <input
-                type="text"
-                id="formPassHolderSearch"
-                class="pass-form-input"
-                placeholder="Start typing a name..."
-                autocomplete="off"
-            >
+                                    <div
+                                        id="passHolderResults"
+                                        class="pass-user-results"
+                                    ></div>
 
 
-            <div
-                id="passHolderResults"
-                class="pass-user-results"
-            ></div>
+                                    <div
+                                        id="passHolderSelected"
+                                        class="pass-user-selected"
+                                    ></div>
 
 
-            <div
-                id="passHolderSelected"
-                class="pass-user-selected"
-            ></div>
+                                    <input
+                                        type="hidden"
+                                        id="formPassHolder"
+                                        value=""
+                                    >
 
-
-            <input
-                type="hidden"
-                id="formPassHolder"
-                value=""
-            >
-
-            <!-- Employee / Contractor -->
-            <input
-                type="hidden"
-                id="formPassHolderType"
-                value="employee"
-            >
-
-        </div>
-
-    </div>
-
-
+                                </div>
                                 
 
 
@@ -3925,8 +3923,8 @@ function getStatus(record) {
 
                                 <label class="pass-form-label">
 
-                                    Optional supporting document (PDF)
-
+                                    Evidence of clearance
+<span class="pass-form-required">*</span>
                                 </label>
 
 
@@ -4203,6 +4201,65 @@ function getStatus(record) {
                 "formAccess"
             );
 
+var contractorButton =
+    document.getElementById("contractorButton");
+
+var passHolderPicker =
+    document.getElementById("passHolderPicker");
+
+var passHolderSearch =
+    document.getElementById("formPassHolderSearch");
+
+    var isContractorSelected = false;
+
+contractorButton.addEventListener(
+    "click",
+    function () {
+
+        isContractorSelected =
+            !isContractorSelected;
+
+        contractorButton.classList.toggle(
+            "selected",
+            isContractorSelected
+        );
+
+        // Clear any existing People Search selection
+        selectedPassHolder = null;
+
+        var hiddenField =
+            document.getElementById("formPassHolder");
+
+        if (hiddenField) {
+            hiddenField.value = "";
+        }
+
+        if (passHolderSearch) {
+            passHolderSearch.value = "";
+        }
+
+        // Clear existing search results
+        var results =
+            document.getElementById("passHolderResults");
+
+        if (results) {
+            results.innerHTML = "";
+        }
+    }
+);
+
+var contractorButton =
+    document.getElementById("contractorButton");
+
+var passHolderPicker =
+    document.getElementById("passHolderPicker");
+
+var passHolderSearch =
+    document.getElementById("formPassHolderSearch");
+
+var isContractorSelected = false;
+
+
 
 const newStarterSelect = document.getElementById("formNewStarter");
 const clearanceSelect = document.getElementById("formClearance");
@@ -4236,8 +4293,58 @@ function updateNationalInsuranceVisibility() {
     }
 }
 
-newStarterSelect.addEventListener("change", updateNationalInsuranceVisibility);
-clearanceSelect.addEventListener("change", updateNationalInsuranceVisibility);
+newStarterSelect.addEventListener(
+    "change",
+    updateNationalInsuranceVisibility
+);
+
+clearanceSelect.addEventListener(
+    "change",
+    function () {
+
+        updateNationalInsuranceVisibility();
+
+        var expiryDateInput =
+            document.getElementById("formExpiryDate");
+
+        if (!expiryDateInput) {
+            return;
+        }
+
+        if (this.value === "BPSS") {
+
+            var expiryDate = new Date();
+
+            expiryDate.setFullYear(
+                expiryDate.getFullYear() + 5
+            );
+
+            var year =
+                expiryDate.getFullYear();
+
+            var month =
+                String(
+                    expiryDate.getMonth() + 1
+                ).padStart(2, "0");
+
+            var day =
+                String(
+                    expiryDate.getDate()
+                ).padStart(2, "0");
+
+            expiryDateInput.value =
+                year + "-" + month + "-" + day;
+
+        }
+        else {
+
+            expiryDateInput.value = "";
+
+        }
+
+    }
+);
+
 
 // Set the correct initial state
 updateNationalInsuranceVisibility();
@@ -4250,15 +4357,12 @@ updateNationalInsuranceVisibility();
         --------------------------------------------------------
         */
 
-        selectedPassHolder =
-            null;
+        selectedPassHolder = null;
 
-
-        var passHolderSearch =
-            document.getElementById(
-                "formPassHolderSearch"
-            );
-
+var passHolderSearch =
+    document.getElementById(
+        "formPassHolderSearch"
+    );
 
 if (passHolderSearch) {
 
@@ -4271,12 +4375,12 @@ if (passHolderSearch) {
 
 
             /*
-            ------------------------------------------------
-            CONTRACTOR MODE
-            ------------------------------------------------
-            */
-
-            if (passHolderType === "contractor") {
+             * CONTRACTOR MODE
+             *
+             * Keep the input as normal plain text.
+             * Do NOT perform People Search.
+             */
+            if (isContractorSelected) {
 
                 var hiddenField =
                     document.getElementById(
@@ -4284,10 +4388,18 @@ if (passHolderSearch) {
                     );
 
                 if (hiddenField) {
-
                     hiddenField.value =
                         searchText;
+                }
 
+                // Clear any old People Search results
+                var results =
+                    document.getElementById(
+                        "passHolderResults"
+                    );
+
+                if (results) {
+                    results.innerHTML = "";
                 }
 
                 return;
@@ -4295,14 +4407,11 @@ if (passHolderSearch) {
 
 
             /*
-            ------------------------------------------------
-            EXISTING EMPLOYEE / ENTRA LOGIC
-            ------------------------------------------------
-            */
-
-            if (
-                selectedPassHolder
-            ) {
+             * NORMAL MODE
+             *
+             * Existing People Search behaviour
+             */
+            if (selectedPassHolder) {
 
                 selectedPassHolder =
                     null;
@@ -4345,11 +4454,6 @@ if (passHolderSearch) {
     );
 
 }
-
-
-
-
-        
 
 
         /*
@@ -4481,184 +4585,6 @@ if (passHolderSearch) {
             );
 
     }
-
-
-/*
-============================================================
-PASS HOLDER TYPE
-============================================================
-*/
-
-var passHolderType = "employee";
-
-
-var employeeButton =
-    document.getElementById(
-        "passHolderEmployeeBtn"
-    );
-
-
-var contractorButton =
-    document.getElementById(
-        "passHolderContractorBtn"
-    );
-
-
-if (employeeButton) {
-
-    employeeButton.addEventListener(
-        "click",
-        function () {
-
-            setPassHolderType("employee");
-
-        }
-    );
-
-}
-
-
-if (contractorButton) {
-
-    contractorButton.addEventListener(
-        "click",
-        function () {
-
-            setPassHolderType("contractor");
-
-        }
-    );
-
-}
-
-
-function setPassHolderType(type) {
-
-    passHolderType = type;
-
-
-    var typeField =
-        document.getElementById(
-            "formPassHolderType"
-        );
-
-
-    var searchInput =
-        document.getElementById(
-            "formPassHolderSearch"
-        );
-
-
-    var employeeButton =
-        document.getElementById(
-            "passHolderEmployeeBtn"
-        );
-
-
-    var contractorButton =
-        document.getElementById(
-            "passHolderContractorBtn"
-        );
-
-
-    /*
-    --------------------------------------------------------
-    Clear whatever was previously selected
-    --------------------------------------------------------
-    */
-
-    clearPassHolder();
-
-
-    /*
-    --------------------------------------------------------
-    Store the type
-    --------------------------------------------------------
-    */
-
-    if (typeField) {
-
-        typeField.value =
-            type;
-
-    }
-
-
-    /*
-    --------------------------------------------------------
-    Update buttons
-    --------------------------------------------------------
-    */
-
-    if (employeeButton) {
-
-        employeeButton.classList.toggle(
-            "active",
-            type === "employee"
-        );
-
-    }
-
-
-    if (contractorButton) {
-
-        contractorButton.classList.toggle(
-            "active",
-            type === "contractor"
-        );
-
-    }
-
-
-    /*
-    --------------------------------------------------------
-    CONTRACTOR
-    --------------------------------------------------------
-    */
-
-    if (type === "contractor") {
-
-        if (searchInput) {
-
-            searchInput.placeholder =
-                "Enter contractor name...";
-
-            searchInput.value =
-                "";
-
-            searchInput.style.display =
-                "block";
-
-        }
-
-    }
-
-
-    /*
-    --------------------------------------------------------
-    EMPLOYEE
-    --------------------------------------------------------
-    */
-
-    else {
-
-        if (searchInput) {
-
-            searchInput.placeholder =
-                "Start typing a name...";
-
-            searchInput.value =
-                "";
-
-            searchInput.style.display =
-                "block";
-
-        }
-
-    }
-
-}
-
 
 
     /*
@@ -6238,6 +6164,7 @@ function validateAndDisplayAttachment(input) {
     }
 
 
+
     /*
     ============================================================
     SUBMIT PASS REQUEST
@@ -7557,97 +7484,6 @@ if (
 
     }
 
-var employeeButton =
-    document.getElementById(
-        "passHolderEmployeeBtn"
-    );
-
-var contractorButton =
-    document.getElementById(
-        "passHolderContractorBtn"
-    );
-
-
-if (employeeButton) {
-
-    employeeButton.addEventListener(
-        "click",
-        function () {
-
-            setPassHolderType("employee");
-
-        }
-    );
-
-}
-
-
-if (contractorButton) {
-
-    contractorButton.addEventListener(
-        "click",
-        function () {
-
-            setPassHolderType("contractor");
-
-        }
-    );
-
-}
-
-
-function setPassHolderType(type) {
-
-    passHolderType = type;
-
-
-    // Clear existing employee/contractor value
-    clearPassHolder();
-
-
-    var searchInput =
-        document.getElementById(
-            "formPassHolderSearch"
-        );
-
-
-    if (employeeButton) {
-
-        employeeButton.classList.toggle(
-            "active",
-            type === "employee"
-        );
-
-    }
-
-
-    if (contractorButton) {
-
-        contractorButton.classList.toggle(
-            "active",
-            type === "contractor"
-        );
-
-    }
-
-
-    if (searchInput) {
-
-        if (type === "contractor") {
-
-            searchInput.placeholder =
-                "Enter contractor name...";
-
-        } else {
-
-            searchInput.placeholder =
-                "Start typing a name...";
-
-        }
-
-    }
-
-}
 
     /*
     ============================================================
@@ -7698,6 +7534,8 @@ function setPassHolderType(type) {
         bindTableRows();
 
     }
+
+
 
 
     /*
@@ -7819,7 +7657,7 @@ ${
 
 
                                     <td>
-                                        ${formatDate(record.RequestDate)}
+                                        ${formatDate(record.Created)}
                                     </td>
 
 
@@ -7863,25 +7701,26 @@ ${
 </td>
 
 ${
-                                        adminMode &&
-                                                String(record.Status || "").trim() === "Pass with Front Desk Security"
-        
-                                        ?
-                                        `
-                                            <td>
-                                                            <button
+    adminMode &&
+    [
+        "Pass with Front Desk Security",
+        "Pass with JRCC Security"
+    ].includes(String(record.Status || "").trim())
+    ?
+    `
+        <td>
+            <button
                 type="button"
                 class="issue-pass-button"
                 data-issue-pass-id="${escapeHtml(record.ID)}"
             >
                 Issue Pass
             </button>
-            '
-                                            </td>
-                                        `
-                                        :
-                                        ""
-                                    }
+        </td>
+    `
+    :
+    ""
+}
 
 
                                 </tr>
